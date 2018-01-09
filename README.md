@@ -6,7 +6,7 @@ The purpose of this tool is to decrease the overhead in maintaining a debian pac
 in a git repository. It tries to mimic the CLI of other popular tools such as git and bundler.
 It is intended to be helpful when integrating other build tools/systems and with CI/CD.
 
-It has been ported to golang from the [ruby project](https://github.com/penguinpowernz/ian).
+It has been ported to golang from the [ruby project of the same name](https://github.com/penguinpowernz/ian).
 
 ## Requirements
 
@@ -87,19 +87,19 @@ with ian but from a different folder location.
 
 ## TODO
 
-- [] tests
-- [] help
-- [] releasing
-- [] pushing
-- [] ignore file
-- [] add `pkg` to the gitignore file
-- [] allow specifying where to output the package to after building
-- [] deps management
-- [] running of a build script
-- [] install after build
-- [] build a specific version
-- [] more tests
-- [] optional semver enforcement
+- [ ] tests
+- [ ] help
+- [ ] releasing
+- [ ] pushing
+- [ ] ignore file
+- [ ] add `pkg` to the gitignore file
+- [ ] allow specifying where to output the package to after building
+- [ ] deps management
+- [ ] running of a build script
+- [ ] install after build
+- [ ] build a specific version
+- [ ] more tests
+- [ ] optional semver enforcement
 
 ## Contributing
 
