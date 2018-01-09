@@ -48,9 +48,9 @@ func Package(ctrl control.Control, dir string, pkgdest string) (string, error) {
 		return "", fmt.Errorf("failed to generate md5sums: %s", err)
 	}
 
-	pkgName, err := mkPkgName(ctrl, dir, pkgdest)
-	if err != nil {
-		return "", fmt.Errorf("failed to make package name: %s", err)
+	pkgName := mkPkgName(ctrl.Filename(), dir, pkgdest)
+	if err = os.MkdirAll(pkgdest, 0755); err != nil {
+		return "", fmt.Errorf("failed to make package dir: %s", err)
 	}
 
 	sizeK, err := CalculateSize(dir, excludes)
@@ -136,17 +136,12 @@ func moveRootFiles(dir, pkg string, files []string) error {
 	return nil
 }
 
-func mkPkgName(ctrl control.Control, dir string, pkgdest string) (string, error) {
+func mkPkgName(fn string, dir string, pkgdest string) string {
 	if pkgdest == "" {
 		pkgdest = filepath.Join(dir, "pkg")
 	}
 
-	err := os.MkdirAll(pkgdest, 0755)
-	if err != nil {
-		return "", err
-	}
-
-	return filepath.Join(pkgdest, ctrl.Filename()), nil
+	return filepath.Join(pkgdest, fn)
 }
 
 // CalculateSize of a directory using du, excluding any given paths
