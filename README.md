@@ -91,14 +91,12 @@ with ian but from a different folder location.
 - [ ] help
 - [ ] releasing
 - [ ] pushing
-- [ ] ignore file
-- [ ] add `pkg` to the gitignore file
+- [x] ignore file
 - [ ] allow specifying where to output the package to after building
 - [ ] deps management
 - [ ] running of a build script
 - [ ] install after build
 - [ ] build a specific version
-- [ ] more tests
 - [ ] optional semver enforcement
 
 ## Contributing
