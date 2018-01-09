@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/fatih/structs"
+	"github.com/penguinpowernz/go-ian/util/str"
 )
 
 // Control represents a debian control file
@@ -162,7 +163,7 @@ func Parse(ctrl string) (Control, error) {
 		}
 	}
 
-	c.LongDesc = strings.Join(cleanStrings(longDesc), "\n")
+	c.LongDesc = strings.Join(str.CleanStrings(longDesc), "\n")
 
 	return c, nil
 }
@@ -182,14 +183,6 @@ func serialize(strs []string) string {
 	return strings.Join(strs, ", ")
 }
 
-func unserialize(str string) []string {
-	return cleanStrings(strings.Split(str, ","))
-}
-
-func cleanStrings(strs []string) []string {
-	for i, s := range strs {
-		strs[i] = strings.TrimSpace(s)
-	}
-
-	return strs
+func unserialize(s string) []string {
+	return str.CleanStrings(strings.Split(s, ","))
 }
