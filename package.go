@@ -26,6 +26,9 @@ func Package(ctrl control.Control, dir string, pkgdest string) (string, error) {
 	defer os.RemoveAll(tmp)
 
 	excludes := PackageExclusions(dir)
+	if ign, err := Ignored(dir); err == nil {
+		excludes = append(excludes, ign...)
+	}
 
 	err = stage(dir, tmp, excludes)
 	if err != nil {

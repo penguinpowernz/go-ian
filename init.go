@@ -28,7 +28,14 @@ func Init(dir string) error {
 	initControlFile(dir)
 	initPostinst(dir)
 
+	initIgnoreFile(dir)
+
 	return nil
+}
+
+func initIgnoreFile(dir string) error {
+	_, err := os.OpenFile(filepath.Join(dir, ".ianignore"), os.O_RDONLY|os.O_CREATE, 0666)
+	return err
 }
 
 func initControlDir(dir string) error {
