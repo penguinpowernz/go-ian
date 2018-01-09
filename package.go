@@ -1,9 +1,7 @@
 package ian
 
 import (
-	"bytes"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -11,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/penguinpowernz/go-ian/debian/control"
+	"github.com/penguinpowernz/go-ian/util/checksum"
 )
 
 // Package will create a debian package from the given control file and directory. It does this by
@@ -45,7 +44,7 @@ func Package(ctrl control.Control, dir string, pkgdest string) (string, error) {
 	}
 
 	sums := filepath.Join(ControlDir(dir), "md5sums")
-	if err = GenerateMD5SUM(tmp, sums); err != nil {
+	if err = checksum.MD5(tmp, sums); err != nil {
 		return "", fmt.Errorf("failed to generate md5sums: %s", err)
 	}
 
@@ -165,41 +164,4 @@ func CalculateSize(dir string, excludes []string) (string, error) {
 
 	sizeK := strings.Split(string(data), "\t")[0]
 	return sizeK, nil
-}
-
-// GenerateMD5SUM of the given directories files and save the output to the given
-// outfile path.  Uses find, xargs and md5sum and recurses the entire directory.
-func GenerateMD5SUM(dir, outfile string) error {
-	find := exec.Command("/usr/bin/find", dir, "-type", "f")
-	xargs := exec.Command("/usr/bin/xargs", "md5sum")
-
-	r, w := io.Pipe()
-	find.Stdout = w
-	xargs.Stdin = r
-
-	var buf bytes.Buffer
-	xargs.Stdout = &buf
-
-	if err := find.Start(); err != nil {
-		return err
-	}
-
-	if err := xargs.Start(); err != nil {
-		return err
-	}
-
-	if err := find.Wait(); err != nil {
-		return err
-	}
-
-	if err := w.Close(); err != nil {
-		return err
-	}
-
-	if err := xargs.Wait(); err != nil {
-		return err
-	}
-
-	data := []byte(strings.Replace(string(buf.Bytes()), dir+"/", "", -1))
-	return ioutil.WriteFile(outfile, data, 0755)
 }
