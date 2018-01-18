@@ -50,7 +50,7 @@ func Package(ctrl control.Control, dir string, pkgdest string) (string, error) {
 
 	pkgName := mkPkgName(ctrl.Filename(), dir, pkgdest)
 	if err = os.MkdirAll(pkgdest, 0755); err != nil {
-		return "", fmt.Errorf("failed to make package dir: %s", err)
+		return "", fmt.Errorf("failed to make package dir at %s: %s", pkgdest, err)
 	}
 
 	sizeK, err := CalculateSize(dir, excludes)
