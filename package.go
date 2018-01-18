@@ -72,7 +72,7 @@ func Package(ctrl control.Control, dir string, pkgdest string) (string, error) {
 // PackageExclusions provides things in the repo to be excluded from the package
 func PackageExclusions(dir string) []string {
 	return []string{
-		".git", "pkg", ".gitignore", ".ianpush", ".ianignore",
+		".git", "pkg", ".gitignore", ".ianpush", ".ianignore", ".gitkeep",
 	}
 }
 
