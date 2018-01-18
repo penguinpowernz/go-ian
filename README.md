@@ -88,14 +88,15 @@ with ian but from a different folder location.
 ## TODO
 
 - [ ] tests
-- [ ] help
+- [ ] add help page
 - [ ] releasing
-- [ ] pushing
+- [x] pushing
+- [ ] test pushing
 - [x] ignore file
 - [ ] allow specifying where to output the package to after building
 - [ ] deps management
 - [ ] running of a build script
-- [ ] install after build
+- [ ] install after packaging
 - [ ] build a specific version
 - [ ] optional semver enforcement
 
