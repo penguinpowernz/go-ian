@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
+
+	"bitbucket.org/autogrowsystems/go-sdk/util/tell"
 
 	ian "github.com/penguinpowernz/go-ian"
 	"github.com/penguinpowernz/go-ian/debian/control"
@@ -78,6 +81,23 @@ func main() {
 		ctrl, err := control.Read(ian.ControlFile(dir))
 		fatalIf(err, "couldn't read control file")
 		fmt.Println(ctrl.String())
+
+	case "push":
+		ensureInit(dir)
+		pushFile := filepath.Join(dir, ".ianpush")
+		_, err := os.Stat(pushFile)
+		if os.IsNotExist(err) {
+			tell.Fatalf("No .ianpush file exists")
+		}
+
+		pkg := os.Args[2]
+		if pkg == "" {
+			ctrl, err := control.Read(ian.ControlFile(dir))
+			tell.IfFatalf(err, "couldn't read control file")
+			pkg = filepath.Join(dir, "pkg", ctrl.Filename())
+		}
+
+		tell.IfFatalf(ian.Push(pushFile, pkg), "pushing failed")
 
 	case "-v":
 		fallthrough
