@@ -13,7 +13,7 @@ import (
 	"github.com/penguinpowernz/go-ian/debian/control"
 )
 
-var version = "?"
+var version = "v0.7.0"
 
 func main() {
 
