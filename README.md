@@ -68,10 +68,19 @@ The architecture and the version can be set quickly in this manner.  Other field
 
     ian pkg
     
-The one you came here for.  Builds a package, excluding junk files like `.git` and `.gitignore`, moves root
-files (like `README.md`) to a `/usr/share/doc` folder so you don't dirty your root partition on install.  The
-package will be output to a `pkg` directory in the root of the repo.  It will also generate the md5sums file
+The one you came here for.  Packages the repo in a debian package, excluding junk files like `.git` and `.gitignore`, 
+moves root files (like `README.md`) to a `/usr/share/doc` folder so you don't dirty your root partition on install.  
+The package will be output to a `pkg` directory in the root of the repo.  It will also generate the md5sums file
 and calculate the package size proir to building.
+
+### Push
+
+    ian push [name]
+
+Setup scripts to run in a file called `.ianpush` in the repo root and running `ian push` will run all the lines in
+the file as commands with the current package.  The package filename will be appended to each command unless `$PKG`
+is found on the line, in which case that will be replaced with the package filename.  Alternatively the package
+filename can be given as an argument.
 
 ### Other
 
@@ -91,7 +100,7 @@ with ian but from a different folder location.
 - [ ] add help page
 - [ ] releasing
 - [x] pushing
-- [ ] test pushing
+- [x] test pushing
 - [x] ignore file
 - [ ] allow specifying where to output the package to after building
 - [ ] deps management

@@ -7,13 +7,12 @@ import (
 	"os"
 	"path/filepath"
 
-	"bitbucket.org/autogrowsystems/go-sdk/util/tell"
-
 	ian "github.com/penguinpowernz/go-ian"
 	"github.com/penguinpowernz/go-ian/debian/control"
+	"github.com/penguinpowernz/go-ian/util/tell"
 )
 
-var version = "v0.7.2"
+var version = "v0.8.0"
 
 func main() {
 
@@ -90,11 +89,12 @@ func main() {
 			tell.Fatalf("No .ianpush file exists")
 		}
 
-		pkg := os.Args[2]
-		if pkg == "" {
-			ctrl, err := control.Read(ian.ControlFile(dir))
-			tell.IfFatalf(err, "couldn't read control file")
-			pkg = filepath.Join(dir, "pkg", ctrl.Filename())
+		ctrl, err := control.Read(ian.ControlFile(dir))
+		tell.IfFatalf(err, "couldn't read control file")
+		pkg := filepath.Join(dir, "pkg", ctrl.Filename())
+
+		if len(os.Args) == 3 {
+			pkg = os.Args[2]
 		}
 
 		tell.IfFatalf(ian.Push(pushFile, pkg), "pushing failed")
