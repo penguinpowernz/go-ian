@@ -128,7 +128,7 @@ func Parse(ctrl string) (Control, error) {
 
 	for _, line := range lines {
 		if strings.HasPrefix(line, "  ") {
-			longDesc = append(longDesc, "")
+			longDesc = append(longDesc, strings.TrimSpace(line))
 			continue
 		}
 		if strings.TrimSpace(line) == "" {
