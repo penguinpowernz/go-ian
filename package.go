@@ -17,6 +17,10 @@ import (
 // of the package to a /usr/share/doc folder.  Then it calculates the package size, file checksums and
 // calls dpkg-deb to build the package.  The path to the package and an error (if any) is returned.
 func Package(ctrl control.Control, dir string, pkgdest string) (string, error) {
+	if pkgdest == "" {
+		pkgdest = filepath.Join(dir, "pkg")
+	}
+
 	tmp, err := ioutil.TempDir("/tmp", "go-ian")
 	if err != nil {
 		return "", fmt.Errorf("couldn't make tmp dir: %s", err)
