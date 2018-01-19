@@ -1,6 +1,7 @@
 package control
 
 import (
+	"strings"
 	"testing"
 
 	. "github.com/smartystreets/goconvey/convey"
@@ -16,6 +17,13 @@ func TestString(t *testing.T) {
 			So(s, ShouldContainSubstring, "  hey ho")
 			So(s, ShouldContainSubstring, "  banana boat")
 		})
+	})
+
+	Convey("when a control file is rendered to a string", t, func() {
+		ctrl := Default()
+		lines := strings.Split(ctrl.String(), "\n")
+		last := lines[len(lines)-1]
+		So(last, ShouldEqual, "")
 	})
 }
 
@@ -34,6 +42,7 @@ Homepage: http://example.com
 Description: This is a description
   hey ho
   banana boat
+
 `
 
 		Convey("when it is parsed", func() {

@@ -92,6 +92,7 @@ func (c Control) String() string {
 		lines = append(lines, "  "+l)
 	}
 
+	lines = append(lines, "") // empty new line on the last line as per spec
 	return strings.Join(lines, "\n")
 }
 
