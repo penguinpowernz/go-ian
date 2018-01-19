@@ -94,6 +94,21 @@ Some other commands:
 You can also use the envvar `IAN_DIR` in the same way that you would use `GIT_DIR` - that is, to do stuff
 with ian but from a different folder location.
 
+## Library Usage
+
+The Debian package `Control` struct could come in handy for others.  As a quick overview here's what it can do:
+
+- `Parse([]byte) (Control, error)` - parse the bytes from the control file
+- `Read(string) (Control, error)` - read the given file and parse it's contents
+- `Default() (Control)` - a default package control file
+- `ctrl.Filename() string` - the almost Debian standard filename (missing distro name)
+- `ctrl.String() string` - render the control file as a string
+- `ctrl.WriteFile(string) error` - write the string into the given filename
+
+Plus the exported fields on the `Control` struct that mirror the dpkg field names.
+
+For more information please check the godocs.
+
 ## TODO
 
 - [ ] tests

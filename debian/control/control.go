@@ -119,8 +119,8 @@ func Default(name ...string) Control {
 
 // Parse takes a control file contents and turns it into
 // a control file struct.
-func Parse(ctrl string) (Control, error) {
-	lines := strings.Split(ctrl, "\n")
+func Parse(data []byte) (Control, error) {
+	lines := strings.Split(string(data), "\n")
 	longDesc := []string{}
 
 	c := Default()
@@ -177,7 +177,7 @@ func Read(fn string) (Control, error) {
 		return Control{}, err
 	}
 
-	return Parse(string(data))
+	return Parse(data)
 }
 
 func serialize(strs []string) string {
