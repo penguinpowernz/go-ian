@@ -10,10 +10,11 @@ import (
 
 	ian "github.com/penguinpowernz/go-ian"
 	"github.com/penguinpowernz/go-ian/debian/control"
+	"github.com/penguinpowernz/go-ian/util/file"
 	"github.com/penguinpowernz/go-ian/util/tell"
 )
 
-var version = "v0.8.1"
+var version = "v0.9.0"
 
 func main() {
 
@@ -79,6 +80,17 @@ func main() {
 		for _, dep := range ctrl.Depends {
 			fmt.Println(dep)
 		}
+
+	case "build":
+		script := ian.ControlDir(dir, "build")
+		if !file.Exists(script) {
+			tell.Fatalf("script not found at %s", script)
+		}
+
+		ctrl := readCtrl(dir)
+		cmd := exec.Command(script, dir, ctrl.Version, ctrl.Arch)
+		cmd.Stdout = os.Stdout
+		tell.IfFatalf(cmd.Run(), "")
 
 	case "info":
 		ctrl := readCtrl(dir)
@@ -154,6 +166,7 @@ Available commands:
 
 	new        Create a new Debian package from scratch
 	init       Initialize the current folder as a Debian package
+	build      Run the script at DEBIAN/build
 	pkg        Build a Debian package
 	push       Push the latest debian package up
 	set        Modify the Debian control file
@@ -163,7 +176,6 @@ Available commands:
 	version    Print the current versions
 `)
 
-	// build      Run the script at DEBIAN/build
 	// install    Build and install a Debian package
 	// release    Release the current or new version
 }

@@ -114,14 +114,15 @@ For more information please check the godocs.
 ## TODO
 
 - [ ] tests
-- [ ] add help page
+- [x] add help page
+- [ ] add subcommands help
 - [ ] releasing
 - [x] pushing
 - [x] test pushing
 - [x] ignore file
 - [ ] allow specifying where to output the package to after building
 - [ ] deps management
-- [ ] running of a build script
+- [x] running of a build script
 - [ ] install after packaging
 - [ ] build a specific version
 - [ ] optional semver enforcement
