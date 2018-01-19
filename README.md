@@ -88,8 +88,10 @@ Some other commands:
 
     ian excludes    # shows the excluded files
     ian size        # calculates the package size (in kB)
-    ian -v          # prints the version
-    ian version     # prints the version
+    ian -v          # prints the ian version
+    ian version     # prints the package version
+    ian versions    # prints all known versions
+    ian deps        # prints the dependencies line by line
 
 You can also use the envvar `IAN_DIR` in the same way that you would use `GIT_DIR` - that is, to do stuff
 with ian but from a different folder location.
