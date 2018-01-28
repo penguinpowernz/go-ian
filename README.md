@@ -8,6 +8,8 @@ It is intended to be helpful when integrating other build tools/systems and with
 
 It has been ported to golang from the [ruby project of the same name](https://github.com/penguinpowernz/ian).
 
+You can download binaries and Debian packages from the [releases](https://github.com/penguinpowernz/go-ian/releases) page.
+
 ## Requirements
 
 I shell out a bit to save time, will eventually make things more native.  For now, need the following tools:
@@ -28,7 +30,7 @@ Simple to build / install, provided you have go setup:
 
     go get github.com/penguinpowernz/go-ian
     go install github.com/penguinpowernz/go-ian/cmd/ian
-    
+        
 I will provide some binaries once I figure out how github releases section works.
     
 ## Usage
