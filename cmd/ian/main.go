@@ -52,9 +52,10 @@ func main() {
 
 	case "pkg":
 		ctrl := readCtrl(dir)
-		name, err := ian.Package(ctrl, dir, "")
-		fatalIf(err, "packaging failed")
-		fmt.Println(name)
+		if os.Args[2] == "-b" {
+			doBuild(dir, ctrl)
+		}
+		doPackage(dir, ctrl)
 
 	case "set":
 		ctrl := readCtrl(dir)
@@ -82,36 +83,20 @@ func main() {
 		}
 
 	case "build":
-		script := ian.ControlDir(dir, "build")
-		if !file.Exists(script) {
-			tell.Fatalf("script not found at %s", script)
-		}
-
 		ctrl := readCtrl(dir)
-		cmd := exec.Command(script, dir, ctrl.Version, ctrl.Arch)
-		cmd.Stdout = os.Stdout
-		tell.IfFatalf(cmd.Run(), "")
+		doBuild(dir, ctrl)
+
+	case "install":
+		ctrl := readCtrl(dir)
+		doInstall(dir, ctrl)
 
 	case "info":
 		ctrl := readCtrl(dir)
 		fmt.Println(ctrl.String())
 
 	case "push":
-		ensureInit(dir)
-		pushFile := filepath.Join(dir, ".ianpush")
-		_, err := os.Stat(pushFile)
-		if os.IsNotExist(err) {
-			tell.Fatalf("No .ianpush file exists")
-		}
-
 		ctrl := readCtrl(dir)
-		pkg := filepath.Join(dir, "pkg", ctrl.Filename())
-
-		if len(os.Args) == 3 {
-			pkg = os.Args[2]
-		}
-
-		tell.IfFatalf(ian.Push(pushFile, pkg), "pushing failed")
+		doPush(dir, ctrl)
 
 	case "-v":
 		fmt.Println("Version", version)
@@ -125,6 +110,34 @@ func main() {
 	case "version":
 		ctrl := readCtrl(dir)
 		fmt.Printf("%s: %s\n", ctrl.Name, ctrl.Version)
+
+	case "bpi":
+		ctrl := readCtrl(dir)
+		doBuild(dir, ctrl)
+		doPackage(dir, ctrl)
+		doInstall(dir, ctrl)
+
+	case "pi":
+		ctrl := readCtrl(dir)
+		doPackage(dir, ctrl)
+		doInstall(dir, ctrl)
+
+	case "pp":
+		ctrl := readCtrl(dir)
+		doPackage(dir, ctrl)
+		doPush(dir, ctrl)
+
+	case "bp":
+		ctrl := readCtrl(dir)
+		doBuild(dir, ctrl)
+		doPackage(dir, ctrl)
+		doPush(dir, ctrl)
+
+	case "bpp":
+		ctrl := readCtrl(dir)
+		doBuild(dir, ctrl)
+		doPackage(dir, ctrl)
+		doPush(dir, ctrl)
 
 	default:
 		fmt.Println("unknown argument:", cmd)
@@ -157,6 +170,45 @@ func readCtrl(dir string) control.Control {
 	return ctrl
 }
 
+func doBuild(dir string, ctrl control.Control) {
+	script := ian.ControlDir(dir, "build")
+	if !file.Exists(script) {
+		tell.Fatalf("script not found at %s", script)
+	}
+	cmd := exec.Command(script, dir, ctrl.Version, ctrl.Arch)
+	cmd.Stdout = os.Stdout
+	tell.IfFatalf(cmd.Run(), "")
+}
+
+func doPackage(dir string, ctrl control.Control) {
+	name, err := ian.Package(ctrl, dir, "")
+	fatalIf(err, "packaging failed")
+	fmt.Println(name)
+}
+
+func doInstall(dir string, ctrl control.Control) {
+	pkg := filepath.Join(dir, "pkg", ctrl.Filename())
+	cmd := exec.Command("/usr/bin/dpkg", "-i", pkg)
+	cmd.Stdout = os.Stdout
+	tell.IfFatalf(cmd.Run(), "installing %s failed", pkg)
+}
+
+func doPush(dir string, ctrl control.Control) {
+	pushFile := filepath.Join(dir, ".ianpush")
+	_, err := os.Stat(pushFile)
+	if os.IsNotExist(err) {
+		tell.Fatalf("No .ianpush file exists")
+	}
+
+	pkg := filepath.Join(dir, "pkg", ctrl.Filename())
+
+	if len(os.Args) == 3 {
+		pkg = os.Args[2]
+	}
+
+	tell.IfFatalf(ian.Push(pushFile, pkg), "pushing failed")
+}
+
 func printHelp() {
 	fmt.Println(`Usage: ian <command> [options]
 	-v,             Print the version
@@ -167,15 +219,21 @@ Available commands:
 	new        Create a new Debian package from scratch
 	init       Initialize the current folder as a Debian package
 	build      Run the script at DEBIAN/build
-	pkg        Build a Debian package
+	pkg [-b]   Build a Debian package
+	install    Install the current version of the package
 	push       Push the latest debian package up
 	set        Modify the Debian control file
 	info       Print information for this package
 	deps       Print dependencies for this package
 	versions   Show all the known versions
 	version    Print the current versions
+	bpi		   run build, pkg, install
+	pi		   run pkg, install
+	pp		   run pkg, push
+	bp		   run build, pkg
+	bpp		   run build, pkg push
+
 `)
 
-	// install    Build and install a Debian package
 	// release    Release the current or new version
 }
