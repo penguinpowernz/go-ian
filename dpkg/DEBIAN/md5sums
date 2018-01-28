@@ -1,4 +1,5 @@
-45b0e7983ccefae081f8821ed9213f51  DEBIAN/md5sums
+35604cdbf9a5db76e61037b4ef3ef87e  DEBIAN/md5sums
 4ec12a76f6ad818714570b196225784a  DEBIAN/postinst
-7c7ab3fe02a452ddfd59e3c76b8bfdac  DEBIAN/control
-cd5ebe4c3f5de5b476eb0f2db5631673  DEBIAN/build
+c12c654ef2608d7c6c892b7def30d996  DEBIAN/control
+e5a05c7eb2900ce2ed110f00556be6cb  DEBIAN/build
+8d0409069619c8476466a84cc1afd453  usr/bin/ian

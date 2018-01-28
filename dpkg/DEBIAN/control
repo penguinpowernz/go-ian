@@ -6,7 +6,7 @@ Architecture: amd64
 Maintainer: Robert McLeod <robert@autogrow.com>
 Essential: no
 Homepage: https://github.com/penguinpowernz/go-ian
-Installed-Size: 44
+Installed-Size: 2480
 Depends: fakeroot, dpkg-dev, rsync, coreutils, findutils
 Description: Debian Package Management
   Provides a command to help with managing Debian
