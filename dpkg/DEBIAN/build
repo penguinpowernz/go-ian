@@ -1,0 +1,13 @@
+#!/bin/bash
+
+dir=$1;
+arch=$2;
+
+export GOPATH=`mktemp -d`;
+export GOARCH=$arch;
+
+go get github.com/penguinpowernz/go-ian;
+go get github.com/penguinpowernz/go-ian/...;
+go build -o $dir/usr/bin/ian github.com/penguinpowernz/go-ian/cmd/ian;
+
+exit 0;
