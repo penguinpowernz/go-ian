@@ -130,6 +130,18 @@ Plus the exported fields on the `Control` struct that mirror the dpkg field name
 
 For more information please check the godocs.
 
+## Dogfooding
+
+The debian package source for Ian is actually managed by Ian in the folder `dpkg`. So you can build the debian
+package for ian, using ian.  Give it a try!
+
+    go get github.com/penguinpowernz/go-ian
+    go install github.com/penguinpowernz/go-ian/cmd/ian
+    cd $GOPATH/src/github.com/penguinpowernz/go-ian/dpkg
+    ian build
+    ian pkg
+    sudo $GOBIN/ian install # or sudo dpkg -i pkg/ian_v1.0.0_amd64.deb
+
 ## TODO
 
 - [ ] tests
@@ -142,8 +154,8 @@ For more information please check the godocs.
 - [ ] allow specifying where to output the package to after building
 - [ ] deps management
 - [x] running of a build script
-- [ ] install after packaging
-- [ ] build a specific version
+- [x] install after packaging
+- [ ] package a specific version
 - [ ] optional semver enforcement
 
 ## Contributing
