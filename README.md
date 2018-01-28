@@ -119,6 +119,8 @@ with ian but from a different folder location.
 
 ## Library Usage
 
+[![GoDoc](https://godoc.org/github.com/penguinpowernz/go-ian/debian/control?status.svg)](https://godoc.org/github.com/penguinpowernz/go-ian/debian/control)
+
 The Debian package `Control` struct could come in handy for others.  As a quick overview here's what it can do:
 
 - `Parse([]byte) (Control, error)` - parse the bytes from the control file
