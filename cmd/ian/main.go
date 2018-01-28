@@ -14,7 +14,7 @@ import (
 	"github.com/penguinpowernz/go-ian/util/tell"
 )
 
-var version = "v0.9.0"
+var version = "v1.0.0"
 
 func main() {
 
@@ -25,6 +25,11 @@ func main() {
 
 	if envdir := os.Getenv("IAN_DIR"); envdir != "" {
 		dir = envdir
+	}
+
+	if len(os.Args) == 1 {
+		printHelp()
+		os.Exit(0)
 	}
 
 	cmd := os.Args[1]
@@ -232,7 +237,6 @@ Available commands:
 	pp		   run pkg, push
 	bp		   run build, pkg
 	bpp		   run build, pkg push
-
 `)
 
 	// release    Release the current or new version
