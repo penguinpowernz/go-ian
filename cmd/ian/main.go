@@ -14,7 +14,7 @@ import (
 	"github.com/penguinpowernz/go-ian/util/tell"
 )
 
-var version = "v1.0.0"
+var version = "v1.0.1"
 
 func main() {
 
@@ -136,7 +136,6 @@ func main() {
 		ctrl := readCtrl(dir)
 		doBuild(dir, ctrl)
 		doPackage(dir, ctrl)
-		doPush(dir, ctrl)
 
 	case "bpp":
 		ctrl := readCtrl(dir)
