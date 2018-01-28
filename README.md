@@ -66,12 +66,25 @@ The architecture and the version can be set quickly in this manner.  Other field
 
 ### Packaging
 
-    ian pkg
+    ian pkg [-b]
     
 The one you came here for.  Packages the repo in a debian package, excluding junk files like `.git` and `.gitignore`, 
 moves root files (like `README.md`) to a `/usr/share/doc` folder so you don't dirty your root partition on install.  
 The package will be output to a `pkg` directory in the root of the repo.  It will also generate the md5sums file
-and calculate the package size proir to building.
+and calculate the package size proir to packaging.  By adding a `-b` flag it will run the build script before
+packaging.
+
+### Build
+
+    ian build
+
+This will run the build script found in `DEBIAN/build` parsing it the following arguments:
+
+- root directory of the package git repository
+- architecture from the control file
+- version from the control file
+
+It can do whatever things you need it to do to prepare for the packaging such as building binaries, etc.
 
 ### Push
 
@@ -86,12 +99,18 @@ filename can be given as an argument.
 
 Some other commands:
 
+    ian install     # installs the current package
     ian excludes    # shows the excluded files
     ian size        # calculates the package size (in kB)
     ian -v          # prints the ian version
     ian version     # prints the package version
     ian versions    # prints all known versions
     ian deps        # prints the dependencies line by line
+    bpi		        # run build, pkg, install
+	pi		        # run pkg, install
+	pp		        # run pkg, push
+	bp		        # run build, pkg
+	bpp		        # run build, pkg push
 
 You can also use the envvar `IAN_DIR` in the same way that you would use `GIT_DIR` - that is, to do stuff
 with ian but from a different folder location.
