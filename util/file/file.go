@@ -57,7 +57,7 @@ func MoveFiles(paths []string, dest string) error {
 
 // DirSize uses du to calculate the directory size in bytes
 func DirSize(dir string, excludes []string) (int, error) {
-	args := []string{"-s", dir}
+	args := []string{"-bs", dir}
 	for _, s := range excludes {
 		args = append(args, fmt.Sprintf("--exclude=\"%s\"", s))
 	}
