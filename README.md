@@ -159,6 +159,9 @@ package for ian, using ian.  Give it a try!
 - [x] install after packaging
 - [ ] package a specific version
 - [ ] optional semver enforcement
+- [ ] utilize rules file
+- [ ] support copyright file
+- [ ] support changelog
 
 ## Contributing
 
