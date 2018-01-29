@@ -2,7 +2,9 @@ package control
 
 import (
 	"fmt"
+	"io"
 	"io/ioutil"
+	"os"
 	"reflect"
 	"strings"
 
@@ -34,10 +36,19 @@ func (c Control) Filename() string {
 	return fmt.Sprintf("%s_%s_%s.deb", c.Name, c.Version, c.Arch)
 }
 
+func (c Control) Write(w io.Writer) error {
+	_, err := w.Write([]byte(c.String()))
+	return err
+}
+
 // WriteFile will write the control file to the given filename
 func (c Control) WriteFile(fn string) error {
-	data := []byte(c.String())
-	return ioutil.WriteFile(fn, data, 0755)
+	f, err := os.OpenFile(fn, os.O_CREATE|os.O_WRONLY, 0755)
+	if err != nil {
+		return err
+	}
+
+	return c.Write(f)
 }
 
 // String returns the text contents of the control file

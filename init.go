@@ -2,6 +2,8 @@ package ian
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 
 	"github.com/penguinpowernz/go-ian/util/file"
 
@@ -20,8 +22,14 @@ func Initialize(dir string) error {
 		return fmt.Errorf("already initialized")
 	}
 
-	pkg := Pkg{dir: dir}
-	control.Default().WriteFile(pkg.CtrlFile())
+	pkg := Pkg{dir: dir, ctrl: control.Default(filepath.Base(dir))}
+	if err := os.MkdirAll(pkg.CtrlDir(), 0755); err != nil {
+		return err
+	}
+
+	if err := pkg.ctrl.WriteFile(pkg.CtrlFile()); err != nil {
+		return err
+	}
 
 	file.EmptyBashScript(pkg.CtrlDir("postinst"))
 	file.EmptyBashScript(pkg.CtrlDir("prerm"))
