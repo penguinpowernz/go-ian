@@ -18,6 +18,10 @@ var version = "v1.1.0"
 
 func main() {
 
+	if os.Getenv("DEBUG") != "" {
+		ian.Debug = true
+	}
+
 	dir, err := os.Getwd()
 	if err != nil {
 		log.Fatal(err)

@@ -10,6 +10,7 @@ import (
 
 	"github.com/penguinpowernz/go-ian/util/checksum"
 	"github.com/penguinpowernz/go-ian/util/file"
+	"github.com/penguinpowernz/go-ian/util/tell"
 )
 
 var Pkgr = DefaultPackager()
@@ -28,6 +29,7 @@ type BuildRequest struct {
 	pkg     *Pkg
 	tmp     string
 	debpath string
+	Debug   bool
 }
 
 func (br *BuildRequest) CleanUp() {
@@ -37,8 +39,11 @@ func (br *BuildRequest) CleanUp() {
 type PackagerFunc func(br *BuildRequest) error
 type Packager []PackagerFunc
 
+var Debug = false
+
 type BuildOpts struct {
 	Outpath string
+	Debug   bool
 }
 
 // Build will create a debian package from the given control file and directory. It does this by
@@ -46,17 +51,17 @@ type BuildOpts struct {
 // of the package to a /usr/share/doc folder.  Then it calculates the package size, file checksums and
 // calls dpkg-deb to build the package.  The path to the package and an error (if any) is returned.
 func (pkgr Packager) Build(p *Pkg) (string, error) {
-	return pkgr.BuildWithOpts(p, BuildOpts{})
+	return pkgr.BuildWithOpts(p, BuildOpts{Debug: Debug})
 }
 
 // BuildWithOpts does the same as build but with specifc options
 func (pkgr Packager) BuildWithOpts(p *Pkg, opts BuildOpts) (string, error) {
-	br := &BuildRequest{pkg: p, debpath: opts.Outpath}
+	br := &BuildRequest{pkg: p, debpath: opts.Outpath, Debug: opts.Debug}
 
-	for _, fn := range pkgr {
+	for i, fn := range pkgr {
 		err := fn(br)
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("at step %d: %s", i+1, err)
 		}
 	}
 
@@ -76,9 +81,16 @@ var DpkgDebBuild = func(br *BuildRequest) error {
 	br.debpath = filepath.Join(br.debpath, br.pkg.ctrl.Filename())
 
 	cmd := exec.Command("/usr/bin/fakeroot", "dpkg-deb", "-b", br.tmp, br.debpath)
-	// cmd.Stderr = os.Stderr
-	// cmd.Stdout = os.Stderr
-	return cmd.Run()
+	if br.Debug {
+		cmd.Stderr = os.Stderr
+		cmd.Stdout = os.Stderr
+	}
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to build package %s from %s: %s", br.debpath, br.tmp, err)
+	}
+
+	return nil
 }
 
 // CalculateSize of a directory using du, excluding any given paths
@@ -117,8 +129,11 @@ var StageFiles = func(br *BuildRequest) error {
 	args = append(args, br.pkg.Dir(""), br.tmp)
 
 	cmd := exec.Command("/usr/bin/rsync", args...)
-	// cmd.Stderr = os.Stderr
-	// cmd.Stdout = os.Stderr
+	if br.Debug {
+		tell.Debugf("running: %s", str.CommandString(cmd))
+		cmd.Stderr = os.Stderr
+		cmd.Stdout = os.Stderr
+	}
 	return cmd.Run()
 }
 
