@@ -10,11 +10,14 @@ import (
 	"strings"
 )
 
+// Exists returns true if the given path exists
 func Exists(path string) bool {
 	_, err := os.Stat(path)
 	return !os.IsNotExist(err)
 }
 
+// ListFilesIn will give a list of all the files in the root of the given
+// directory (i.e. not recursive)
 func ListFilesIn(dir string) ([]string, error) {
 	files := []string{}
 	list, err := ioutil.ReadDir(dir)
@@ -33,6 +36,8 @@ func ListFilesIn(dir string) ([]string, error) {
 	return files, nil
 }
 
+// MoveFiles will move all the files in the given slice to the given
+// destination.  It will create the destination if need be
 func MoveFiles(paths []string, dest string) error {
 
 	if len(paths) == 0 {
@@ -71,6 +76,8 @@ func DirSize(dir string, excludes []string) (int, error) {
 	return strconv.Atoi(strings.Split(string(data), "\t")[0])
 }
 
+// Create is a shortcut to create a file with perms of 755 and
+// the given contents
 func Create(path string, data []byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return err
@@ -79,6 +86,7 @@ func Create(path string, data []byte) error {
 	return ioutil.WriteFile(path, data, 0755)
 }
 
+// EmptyBashScript creates an empty bashscript at the given filepath
 func EmptyBashScript(fn string) error {
 	return Create(fn, []byte(`#!/bin/bash
 
@@ -88,6 +96,7 @@ exit 0;
 `))
 }
 
+// EmptyDotFile creates an empty dotfile at the given filepath
 func EmptyDotFile(path string) error {
 	_, err := os.OpenFile(path, os.O_RDONLY|os.O_CREATE, 0666)
 	return err

@@ -21,18 +21,24 @@ func (p *Pkg) Dir(paths ...string) string {
 	return filepath.Join(paths...)
 }
 
-func (p *Pkg) DocPath(paths ...string) string {
+// DocPath returns the path to the packages doc folder
+func (p *Pkg) DocPath() string {
 	return p.Dir("usr", "share", "doc", p.ctrl.Name)
 }
 
+// BuildFile returns the filepath to the build script file
 func (p *Pkg) BuildFile() string {
 	return p.CtrlDir("build")
 }
 
+// DebFile returns the filepath to where the debian package
+// should be placed after building it
 func (p *Pkg) DebFile() string {
 	return p.Dir("pkg", p.ctrl.Filename())
 }
 
+// PushFile returns the filepath to the push file for this
+// package
 func (p *Pkg) PushFile() string {
 	return p.Dir(".ianpush")
 }

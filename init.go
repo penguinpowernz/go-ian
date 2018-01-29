@@ -14,6 +14,7 @@ func IsInitialized(dir string) bool {
 	return file.Exists(p.CtrlDir()) && file.Exists(p.CtrlFile())
 }
 
+// Initialize will turn the given directory into an ian repo
 func Initialize(dir string) error {
 	if IsInitialized(dir) {
 		return fmt.Errorf("already initialized")

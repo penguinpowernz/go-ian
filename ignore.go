@@ -19,6 +19,9 @@ func Ignored(dir string) ([]string, error) {
 	return ign, nil
 }
 
+// IgnoreList will use the ignore file from the package to generate
+// a list of ignored file patterns.  If there is no ignore file then
+// an empty slice is returned
 func (p *Pkg) IgnoreList() []string {
 	data, err := ioutil.ReadFile(p.IgnoreFile())
 	if err != nil {
@@ -28,6 +31,7 @@ func (p *Pkg) IgnoreList() []string {
 	return str.CleanStrings(str.Lines(string(data)))
 }
 
+// IgnoreFile returns the path to the packages ignore file
 func (p *Pkg) IgnoreFile() string {
 	return p.Dir(".ianignore")
 }

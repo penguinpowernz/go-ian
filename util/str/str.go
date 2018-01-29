@@ -12,6 +12,7 @@ func CleanStrings(strs []string) []string {
 	return strs
 }
 
+// Lines splits up the given string by newline
 func Lines(s string) []string {
 	return strings.Split(s, "\n")
 }

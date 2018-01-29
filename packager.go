@@ -14,8 +14,12 @@ import (
 	"github.com/penguinpowernz/go-ian/util/tell"
 )
 
-var Pkgr = DefaultPackager()
+// Debug is the default debug mode for the build options when they
+// are not explicity specified with the BuildWithOpts() call
+var Debug = false
 
+// DefaultPackager returns a preconfigured packager
+// using the default packaging steps/strategies
 func DefaultPackager() (p Packager) {
 	return Packager{
 		StageFiles,
@@ -26,6 +30,8 @@ func DefaultPackager() (p Packager) {
 	}
 }
 
+// BuildRequest is like a context object for packager strategies
+// to make us of and share knowledge
 type BuildRequest struct {
 	pkg     *Pkg
 	tmp     string
@@ -33,14 +39,19 @@ type BuildRequest struct {
 	Debug   bool
 }
 
+// CleanUp is run at the end of the package build to clean up
+// any leftover resources
 func (br *BuildRequest) CleanUp() {
 	_ = os.RemoveAll(br.tmp)
 }
 
-type PackagerFunc func(br *BuildRequest) error
-type Packager []PackagerFunc
+// PackagerStrategy is a function that represents a strategy or
+// stage in the packaging process
+type PackagerStrategy func(br *BuildRequest) error
 
-var Debug = false
+// Packager is a collection of packaging steps/strategies that
+// can be used together to build a package
+type Packager []PackagerStrategy
 
 type BuildOpts struct {
 	Outpath string
@@ -70,6 +81,7 @@ func (pkgr Packager) BuildWithOpts(p *Pkg, opts BuildOpts) (string, error) {
 	return br.debpath, nil
 }
 
+// DpkgDebBuild is a packaging step that builds the package using dpkg-deb
 var DpkgDebBuild = func(br *BuildRequest) error {
 	if br.debpath == "" {
 		br.debpath = br.pkg.Dir("pkg")
@@ -107,6 +119,7 @@ var CalculateSize = func(br *BuildRequest) error {
 	return nil
 }
 
+// CalculateMD5Sums is a packaging step that calculates the file sums
 var CalculateMD5Sums = func(br *BuildRequest) error {
 	sums := filepath.Join(br.pkg.CtrlDir(), "md5sums")
 	if err := checksum.MD5(br.tmp, sums); err != nil {
@@ -116,6 +129,8 @@ var CalculateMD5Sums = func(br *BuildRequest) error {
 	return nil
 }
 
+// StageFiles is a packaging step that stages the package files to a
+// temporary directory to work from
 var StageFiles = func(br *BuildRequest) error {
 	var err error
 	br.tmp, err = ioutil.TempDir("/tmp", "go-ian")
@@ -141,6 +156,8 @@ var StageFiles = func(br *BuildRequest) error {
 	return cmd.Run()
 }
 
+// CleanRoot is a packaging step to clean the root folder of the
+// package so that the target root file system is not polluted
 var CleanRoot = func(br *BuildRequest) error {
 	list, err := file.ListFilesIn(br.tmp)
 	if err != nil {
