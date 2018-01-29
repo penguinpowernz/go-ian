@@ -164,6 +164,7 @@ package for ian, using ian.  Give it a try!
 - [ ] utilize rules file
 - [ ] support copyright file
 - [ ] support changelog
+- [ ] don't shell out so much
 
 ## Contributing
 
