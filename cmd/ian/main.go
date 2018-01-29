@@ -62,7 +62,7 @@ func main() {
 		fmt.Println(sizeKB, "kB")
 
 	case "pkg":
-		if os.Args[2] == "-b" {
+		if len(os.Args) >= 3 && os.Args[2] == "-b" {
 			doBuild(dir)
 		}
 		doPackage(dir)

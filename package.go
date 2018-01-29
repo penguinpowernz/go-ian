@@ -16,6 +16,7 @@ type Pkg struct {
 }
 
 func NewPackage(dir string) (p *Pkg, err error) {
+	p = new(Pkg)
 	p.dir = dir
 	p.ctrl, err = control.Read(p.CtrlFile())
 	return

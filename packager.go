@@ -10,6 +10,7 @@ import (
 
 	"github.com/penguinpowernz/go-ian/util/checksum"
 	"github.com/penguinpowernz/go-ian/util/file"
+	"github.com/penguinpowernz/go-ian/util/str"
 	"github.com/penguinpowernz/go-ian/util/tell"
 )
 
@@ -124,9 +125,12 @@ var StageFiles = func(br *BuildRequest) error {
 
 	args := []string{"-rav"}
 	for _, s := range br.pkg.Excludes() {
+		if s == "" {
+			continue
+		}
 		args = append(args, fmt.Sprintf("--exclude=%s", s))
 	}
-	args = append(args, br.pkg.Dir(""), br.tmp)
+	args = append(args, br.pkg.Dir()+"/", br.tmp)
 
 	cmd := exec.Command("/usr/bin/rsync", args...)
 	if br.Debug {

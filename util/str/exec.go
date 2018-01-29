@@ -6,5 +6,5 @@ import (
 )
 
 func CommandString(cmd *exec.Cmd) string {
-	return strings.Join(append([]string{cmd.Path}, cmd.Args...), " ")
+	return strings.Join(cmd.Args, " ")
 }
