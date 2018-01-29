@@ -1,6 +1,6 @@
 # go-ian
 
-Simple debian package building and management named in memory of the late Ian Murdock.
+Simple debian package building and management named in memory of the late Ian Murdock, founder of the Deb**ian** project.
 
 The purpose of this tool is to decrease the overhead in maintaining a debian package stored 
 in a git repository. It tries to mimic the CLI of other popular tools such as git and bundler.
