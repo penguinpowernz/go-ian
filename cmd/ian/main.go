@@ -6,15 +6,15 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"path/filepath"
 
 	ian "github.com/penguinpowernz/go-ian"
 	"github.com/penguinpowernz/go-ian/debian/control"
 	"github.com/penguinpowernz/go-ian/util/file"
+	"github.com/penguinpowernz/go-ian/util/str"
 	"github.com/penguinpowernz/go-ian/util/tell"
 )
 
-var version = "v1.0.1"
+var version = "v1.1.0"
 
 func main() {
 
@@ -39,47 +39,32 @@ func main() {
 		printHelp()
 		os.Exit(0)
 	case "init":
-		fatalIf(ian.Init(dir), "")
+		tell.IfFatalf(ian.Initialize(dir), "")
 
 	case "new":
 		dir = os.Args[2]
-		fatalIf(ian.Init(dir), "")
+		tell.IfFatalf(ian.Initialize(dir), "")
 
 	case "excludes":
-		for _, exc := range ian.PackageExclusions(dir) {
+		pkg := readPkg(dir)
+		for _, exc := range pkg.Excludes() {
 			fmt.Println(exc)
 		}
 
 	case "size":
-		size, err := ian.CalculateSize(dir, ian.PackageExclusions(dir))
-		fatalIf(err, "")
-		fmt.Println(size, "kB")
+		pkg := readPkg(dir)
+		sizeKB, err := pkg.Size()
+		tell.IfFatalf(err, "")
+		fmt.Println(sizeKB, "kB")
 
 	case "pkg":
-		ctrl := readCtrl(dir)
 		if os.Args[2] == "-b" {
-			doBuild(dir, ctrl)
+			doBuild(dir)
 		}
-		doPackage(dir, ctrl)
+		doPackage(dir)
 
 	case "set":
-		ctrl := readCtrl(dir)
-
-		var newVer, newArch string
-		fs := flag.NewFlagSet("set", flag.ContinueOnError)
-		fs.StringVar(&newVer, "v", "", "set the version")
-		fs.StringVar(&newArch, "a", "", "set the architecture")
-		fs.Parse(os.Args[2:])
-
-		if newArch != "" {
-			ctrl.Arch = newArch
-		}
-
-		if newVer != "" {
-			ctrl.Version = newVer
-		}
-
-		fatalIf(ctrl.WriteFile(ian.ControlFile(dir)), "couldn't set fields")
+		doSet(dir, os.Args[2:])
 
 	case "deps":
 		ctrl := readCtrl(dir)
@@ -88,20 +73,17 @@ func main() {
 		}
 
 	case "build":
-		ctrl := readCtrl(dir)
-		doBuild(dir, ctrl)
+		doBuild(dir)
 
 	case "install":
-		ctrl := readCtrl(dir)
-		doInstall(dir, ctrl)
+		doInstall(dir)
 
 	case "info":
 		ctrl := readCtrl(dir)
 		fmt.Println(ctrl.String())
 
 	case "push":
-		ctrl := readCtrl(dir)
-		doPush(dir, ctrl)
+		doPush(dir)
 
 	case "-v":
 		fmt.Println("Version", version)
@@ -117,31 +99,26 @@ func main() {
 		fmt.Printf("%s: %s\n", ctrl.Name, ctrl.Version)
 
 	case "bpi":
-		ctrl := readCtrl(dir)
-		doBuild(dir, ctrl)
-		doPackage(dir, ctrl)
-		doInstall(dir, ctrl)
+		doBuild(dir)
+		doPackage(dir)
+		doInstall(dir)
 
 	case "pi":
-		ctrl := readCtrl(dir)
-		doPackage(dir, ctrl)
-		doInstall(dir, ctrl)
+		doPackage(dir)
+		doInstall(dir)
 
 	case "pp":
-		ctrl := readCtrl(dir)
-		doPackage(dir, ctrl)
-		doPush(dir, ctrl)
+		doPackage(dir)
+		doPush(dir)
 
 	case "bp":
-		ctrl := readCtrl(dir)
-		doBuild(dir, ctrl)
-		doPackage(dir, ctrl)
+		doBuild(dir)
+		doPackage(dir)
 
 	case "bpp":
-		ctrl := readCtrl(dir)
-		doBuild(dir, ctrl)
-		doPackage(dir, ctrl)
-		doPush(dir, ctrl)
+		doBuild(dir)
+		doPackage(dir)
+		doPush(dir)
 
 	default:
 		fmt.Println("unknown argument:", cmd)
@@ -169,48 +146,80 @@ func ensureInit(dir string) {
 
 func readCtrl(dir string) control.Control {
 	ensureInit(dir)
-	ctrl, err := control.Read(ian.ControlFile(dir))
+	pkg, err := ian.NewPackage(dir)
 	fatalIf(err, "couldn't read control file")
-	return ctrl
+	return *pkg.Ctrl()
 }
 
-func doBuild(dir string, ctrl control.Control) {
-	script := ian.ControlDir(dir, "build")
-	if !file.Exists(script) {
-		tell.Fatalf("script not found at %s", script)
+func readPkg(dir string) *ian.Pkg {
+	ensureInit(dir)
+	pkg, err := ian.NewPackage(dir)
+	tell.IfFatalf(err, "couldn't read control file")
+	return pkg
+}
+
+func doBuild(dir string) {
+	p := readPkg(dir)
+	if !file.Exists(p.BuildFile()) {
+		tell.Fatalf("build script not found at %s", p.BuildFile())
 	}
-	cmd := exec.Command(script, dir, ctrl.Version, ctrl.Arch)
+
+	cmd := p.BuildCommand()
+	tell.Debugf("running: %s", str.CommandString(cmd))
 	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
 	tell.IfFatalf(cmd.Run(), "")
 }
 
-func doPackage(dir string, ctrl control.Control) {
-	name, err := ian.Package(ctrl, dir, "")
-	fatalIf(err, "packaging failed")
-	fmt.Println(name)
+func doPackage(dir string) {
+	pkg := readPkg(dir)
+	pkgr := ian.DefaultPackager()
+	outfile, err := pkgr.Build(pkg)
+	tell.IfFatalf(err, "packaging failed")
+	fmt.Println(outfile)
 }
 
-func doInstall(dir string, ctrl control.Control) {
-	pkg := filepath.Join(dir, "pkg", ctrl.Filename())
-	cmd := exec.Command("/usr/bin/dpkg", "-i", pkg)
+func doInstall(dir string) {
+	pkg := readPkg(dir)
+	cmd := exec.Command("/usr/bin/dpkg", "-i", pkg.DebFile())
 	cmd.Stdout = os.Stdout
-	tell.IfFatalf(cmd.Run(), "installing %s failed", pkg)
+	tell.IfFatalf(cmd.Run(), "installing %s failed", pkg.DebFile())
 }
 
-func doPush(dir string, ctrl control.Control) {
-	pushFile := filepath.Join(dir, ".ianpush")
-	_, err := os.Stat(pushFile)
-	if os.IsNotExist(err) {
+func doPush(dir string) {
+	pkg := readPkg(dir)
+	if !file.Exists(pkg.PushFile()) {
 		tell.Fatalf("No .ianpush file exists")
 	}
 
-	pkg := filepath.Join(dir, "pkg", ctrl.Filename())
-
+	deb := pkg.DebFile()
 	if len(os.Args) == 3 {
-		pkg = os.Args[2]
+		deb = os.Args[2]
 	}
 
-	tell.IfFatalf(ian.Push(pushFile, pkg), "pushing failed")
+	err := ian.Push(pkg.PushFile(), deb)
+	tell.IfFatalf(err, "pushing failed")
+}
+
+func doSet(dir string, args []string) {
+	pkg := readPkg(dir)
+	var newVer, newArch string
+	fs := flag.NewFlagSet("set", flag.ContinueOnError)
+	fs.StringVar(&newVer, "v", "", "set the version")
+	fs.StringVar(&newArch, "a", "", "set the architecture")
+	fs.Parse(os.Args[2:])
+
+	if newArch != "" {
+		pkg.Ctrl().Arch = newArch
+	}
+
+	if newVer != "" {
+		pkg.Ctrl().Version = newVer
+	}
+
+	err := pkg.Ctrl().WriteFile(pkg.CtrlFile())
+	tell.IfFatalf(err, "couldn't set fields")
 }
 
 func printHelp() {
@@ -231,11 +240,11 @@ Available commands:
 	deps       Print dependencies for this package
 	versions   Show all the known versions
 	version    Print the current versions
-	bpi		   run build, pkg, install
-	pi		   run pkg, install
-	pp		   run pkg, push
-	bp		   run build, pkg
-	bpp		   run build, pkg push
+	bpi        run build, pkg, install
+	pi         run pkg, install
+	pp         run pkg, push
+	bp         run build, pkg
+	bpp        run build, pkg push
 `)
 
 	// release    Release the current or new version
