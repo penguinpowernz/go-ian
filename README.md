@@ -16,8 +16,6 @@ I shell out a bit to save time, will eventually make things more native.  For no
 
 * dpkg-deb
 * fakeroot
-* md5sum
-* find
 * rsync
 
 This should do it.
@@ -164,7 +162,9 @@ package for ian, using ian.  Give it a try!
 - [ ] utilize rules file
 - [ ] support copyright file
 - [ ] support changelog
-- [ ] don't shell out so much
+- [x] don't shell out for md5sums
+- [ ] don't shell out for rsync
+- [x] don't shell out for find
 
 ## Contributing
 

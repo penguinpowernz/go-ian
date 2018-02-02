@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 	"strconv"
 
-	"github.com/penguinpowernz/go-ian/util/checksum"
 	"github.com/penguinpowernz/go-ian/util/file"
 	"github.com/penguinpowernz/go-ian/util/str"
 	"github.com/penguinpowernz/go-ian/util/tell"
+	"github.com/penguinpowernz/md5walk"
 )
 
 // Debug is the default debug mode for the build options when they
@@ -121,12 +121,19 @@ var CalculateSize = func(br *BuildRequest) error {
 
 // CalculateMD5Sums is a packaging step that calculates the file sums
 var CalculateMD5Sums = func(br *BuildRequest) error {
-	sums := filepath.Join(br.pkg.CtrlDir(), "md5sums")
-	if err := checksum.MD5(br.tmp, sums); err != nil {
+	outfile := (&Pkg{dir: br.tmp}).CtrlDir("md5sums")
+	sums, err := md5walk.Walk(br.tmp)
+	if err != nil {
 		return fmt.Errorf("failed to generate md5sums: %s", err)
 	}
 
-	return nil
+	f, err := os.OpenFile(outfile, os.O_WRONLY|os.O_CREATE, 0755)
+	if err != nil {
+		return fmt.Errorf("failed to generate md5sums: %s", err)
+	}
+
+	_, err = sums.Write(f)
+	return err
 }
 
 // StageFiles is a packaging step that stages the package files to a
