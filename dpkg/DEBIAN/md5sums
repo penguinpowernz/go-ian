@@ -1,5 +1,0 @@
-72f10e4ad40ce459bd47f0677f9fbc52  DEBIAN/control
-4ec12a76f6ad818714570b196225784a  DEBIAN/postinst
-616c2d71f63db6cfaa9a8d861496be77  DEBIAN/md5sums
-e5a05c7eb2900ce2ed110f00556be6cb  DEBIAN/build
-dabaf8d676174fea622089dd1ffbb73d  usr/bin/ian
