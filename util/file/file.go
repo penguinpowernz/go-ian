@@ -30,7 +30,7 @@ func ListFilesIn(dir string) ([]string, error) {
 			continue
 		}
 
-		files = append(files, fi.Name())
+		files = append(files, filepath.Join(dir, fi.Name()))
 	}
 
 	return files, nil
@@ -52,7 +52,17 @@ func MoveFiles(paths []string, dest string) error {
 		newfn := filepath.Join(dest, filepath.Base(oldfn))
 		err := os.Rename(oldfn, newfn)
 		if err != nil {
-			return err
+			return fmt.Errorf("couldn't move %s to new location %s: %s", oldfn, newfn, err)
+		}
+
+		if !Exists(newfn) {
+			return fmt.Errorf("file %s didn't move to new location %s", oldfn, newfn)
+		}
+
+		if Exists(oldfn) {
+			if err := os.Remove(oldfn); err != nil {
+				return fmt.Errorf("couldn't remove old file %s: %s", oldfn, err)
+			}
 		}
 	}
 

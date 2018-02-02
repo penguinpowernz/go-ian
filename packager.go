@@ -171,5 +171,10 @@ var CleanRoot = func(br *BuildRequest) error {
 		return fmt.Errorf("failed to find root files: %s", err)
 	}
 
-	return file.MoveFiles(list, br.tmp)
+	docpath := filepath.Join(br.tmp, "usr", "share", "doc", br.pkg.ctrl.Name)
+	if err := os.MkdirAll(docpath, 0755); err != nil {
+		return fmt.Errorf("failed to create the doc path %s: %s", docpath, err)
+	}
+
+	return file.MoveFiles(list, docpath)
 }
