@@ -1,0 +1,246 @@
+
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <meta charset="UTF-8">
+
+<!-- Begin Jekyll SEO tag v2.3.0 -->
+<title>go-ian | Simple debian package building and management</title>
+<meta property="og:title" content="go-ian" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Simple debian package building and management" />
+<meta property="og:description" content="Simple debian package building and management" />
+<link rel="canonical" href="https://penguinpowernz.github.io/go-ian/" />
+<meta property="og:url" content="https://penguinpowernz.github.io/go-ian/" />
+<meta property="og:site_name" content="go-ian" />
+<script type="application/ld+json">
+{"name":"go-ian","description":"Simple debian package building and management","author":null,"@type":"WebSite","url":"https://penguinpowernz.github.io/go-ian/","image":null,"publisher":null,"headline":"go-ian","dateModified":null,"datePublished":null,"sameAs":null,"mainEntityOfPage":null,"@context":"http://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+
+    <meta name="description" content="Simple debian package building and management"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#157878">
+    <link href='https://fonts.googleapis.com/css?family=Open+Sans:400,700' rel='stylesheet' type='text/css'>
+    <link rel="stylesheet" href="/go-ian/assets/css/style.css?v=d7aeeffb59491142621b70e1834c88801b538667">
+  </head>
+  <body>
+    <section class="page-header">
+      <h1 class="project-name">go-ian</h1>
+      <h2 class="project-tagline">Simple debian package building and management</h2>
+      
+        <a href="https://github.com/penguinpowernz/go-ian" class="btn">View on GitHub</a>
+        <a href="https://github.com/penguinpowernz/go-ian/releases/download/v1.2.0/ian_1.2.0_amd64.deb" class="btn">Debian Package (amd64)</a>
+        <a href="https://github.com/penguinpowernz/go-ian/releases/download/v1.2.0/ian.x86_64.Linux" class="btn">Linux amd64 Binary</a>
+      
+      
+    </section>
+
+    <section class="main-content">
+      <h1 id="go-ian">go-ian</h1>
+
+<p>Simple debian package building and management named in memory of the late Ian Murdock, founder of the Deb<strong>ian</strong> project.</p>
+
+<p>The purpose of this tool is to decrease the overhead in maintaining a debian package stored 
+in a git repository. It tries to mimic the CLI of other popular tools such as git and bundler.
+It is intended to be helpful when integrating other build tools/systems and with CI/CD.</p>
+
+<p>It has been ported to golang from the <a href="https://github.com/penguinpowernz/ian">ruby project of the same name</a>.</p>
+
+<p>You can download binaries and Debian packages from the <a href="https://github.com/penguinpowernz/go-ian/releases">releases</a> page.</p>
+
+<h2 id="requirements">Requirements</h2>
+
+<p>I shell out a bit to save time, will eventually make things more native.  For now, need the following tools:</p>
+
+<ul>
+  <li>dpkg-deb</li>
+  <li>fakeroot</li>
+  <li>rsync</li>
+</ul>
+
+<p>This should do it.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>sudo apt-get install fakeroot dpkg-dev rsync coreutils findutils
+</code></pre></div></div>
+
+<h2 id="installation">Installation</h2>
+
+<p>Simple to build / install, provided you have go setup:</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>go get github.com/penguinpowernz/go-ian
+go install github.com/penguinpowernz/go-ian/cmd/ian
+</code></pre></div></div>
+
+<p>I will provide some binaries once I figure out how github releases section works.</p>
+
+<h2 id="usage">Usage</h2>
+
+<p>This tool is used for working with what Debian called “Binary packages” - that is ones that have the <code class="highlighter-rouge">DEBIAN</code>
+folder in capitals to slap Debian packages together quickly. It uses dpkg-deb -b in the background which most
+Debian package maintainers frown at but it is suitable enough for rolling your own packages quickly, and it
+scratches an itch.</p>
+
+<h3 id="creationinitializing">Creation/Initializing</h3>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ian new my-package
+</code></pre></div></div>
+
+<p>Analogous to <code class="highlighter-rouge">bundle new gemname</code> or <code class="highlighter-rouge">rails new appname</code> this will create a folder called <code class="highlighter-rouge">my-package</code> in the
+current folder and initialize it with the appropriate debian files.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ian init
+</code></pre></div></div>
+
+<p>Analagous to <code class="highlighter-rouge">git init</code> this will do the same as <code class="highlighter-rouge">new</code> but do it in the current folder.</p>
+
+<p>Now you will see you have a <code class="highlighter-rouge">DEBIAN</code> folder with a <code class="highlighter-rouge">control</code> and <code class="highlighter-rouge">postinst</code> file.</p>
+
+<h3 id="info">Info</h3>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ian info
+</code></pre></div></div>
+
+<p>This will simply dump the control file contents out.</p>
+
+<h3 id="set-fields-in-the-control-file">Set fields in the control file</h3>
+
+<p>The architecture and the version can be set quickly in this manner.  Other fields are not (yet) supported.</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ian set -a amd64
+ian set -v 1.2.3-test
+</code></pre></div></div>
+
+<h3 id="packaging">Packaging</h3>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ian pkg [-b]
+</code></pre></div></div>
+
+<p>The one you came here for.  Packages the repo in a debian package, excluding junk files like <code class="highlighter-rouge">.git</code> and <code class="highlighter-rouge">.gitignore</code>, 
+moves root files (like <code class="highlighter-rouge">README.md</code>) to a <code class="highlighter-rouge">/usr/share/doc</code> folder so you don’t dirty your root partition on install.<br />
+The package will be output to a <code class="highlighter-rouge">pkg</code> directory in the root of the repo.  It will also generate the md5sums file
+and calculate the package size proir to packaging.  By adding a <code class="highlighter-rouge">-b</code> flag it will run the build script before
+packaging.</p>
+
+<h3 id="build">Build</h3>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ian build
+</code></pre></div></div>
+
+<p>This will run the build script found in <code class="highlighter-rouge">DEBIAN/build</code> parsing it the following arguments:</p>
+
+<ul>
+  <li>root directory of the package git repository</li>
+  <li>architecture from the control file</li>
+  <li>version from the control file</li>
+</ul>
+
+<p>It can do whatever things you need it to do to prepare for the packaging such as building binaries, etc.</p>
+
+<h3 id="push">Push</h3>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ian push [name]
+</code></pre></div></div>
+
+<p>Setup scripts to run in a file called <code class="highlighter-rouge">.ianpush</code> in the repo root and running <code class="highlighter-rouge">ian push</code> will run all the lines in
+the file as commands with the current package.  The package filename will be appended to each command unless <code class="highlighter-rouge">$PKG</code>
+is found on the line, in which case that will be replaced with the package filename.  Alternatively the package
+filename can be given as an argument.</p>
+
+<h3 id="other">Other</h3>
+
+<p>Some other commands:</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ian install     # installs the current package
+ian excludes    # shows the excluded files
+ian size        # calculates the package size (in kB)
+ian -v          # prints the ian version
+ian version     # prints the package version
+ian versions    # prints all known versions
+ian deps        # prints the dependencies line by line
+bpi		        # run build, pkg, install
+pi		        # run pkg, install
+pp		        # run pkg, push
+bp		        # run build, pkg
+bpp		        # run build, pkg push
+</code></pre></div></div>
+
+<p>You can also use the envvar <code class="highlighter-rouge">IAN_DIR</code> in the same way that you would use <code class="highlighter-rouge">GIT_DIR</code> - that is, to do stuff
+with ian but from a different folder location.</p>
+
+<h2 id="library-usage">Library Usage</h2>
+
+<p><a href="https://godoc.org/github.com/penguinpowernz/go-ian/debian/control"><img src="https://godoc.org/github.com/penguinpowernz/go-ian/debian/control?status.svg" alt="GoDoc" /></a></p>
+
+<p>The Debian package <code class="highlighter-rouge">Control</code> struct could come in handy for others.  As a quick overview here’s what it can do:</p>
+
+<ul>
+  <li><code class="highlighter-rouge">Parse([]byte) (Control, error)</code> - parse the bytes from the control file</li>
+  <li><code class="highlighter-rouge">Read(string) (Control, error)</code> - read the given file and parse it’s contents</li>
+  <li><code class="highlighter-rouge">Default() (Control)</code> - a default package control file</li>
+  <li><code class="highlighter-rouge">ctrl.Filename() string</code> - the almost Debian standard filename (missing distro name)</li>
+  <li><code class="highlighter-rouge">ctrl.String() string</code> - render the control file as a string</li>
+  <li><code class="highlighter-rouge">ctrl.WriteFile(string) error</code> - write the string into the given filename</li>
+</ul>
+
+<p>Plus the exported fields on the <code class="highlighter-rouge">Control</code> struct that mirror the dpkg field names.</p>
+
+<p>For more information please check the godocs.</p>
+
+<h2 id="dogfooding">Dogfooding</h2>
+
+<p>The debian package source for Ian is actually managed by Ian in the folder <code class="highlighter-rouge">dpkg</code>. So you can build the debian
+package for ian, using ian.  Give it a try!</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>go get github.com/penguinpowernz/go-ian
+go install github.com/penguinpowernz/go-ian/cmd/ian
+cd $GOPATH/src/github.com/penguinpowernz/go-ian/dpkg
+ian build
+ian pkg
+sudo $GOBIN/ian install # or sudo dpkg -i pkg/ian_v1.0.0_amd64.deb
+</code></pre></div></div>
+
+<h2 id="todo">TODO</h2>
+
+<ul class="task-list">
+  <li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled="disabled" />tests</li>
+  <li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled="disabled" checked="checked" />add help page</li>
+  <li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled="disabled" />add subcommands help</li>
+  <li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled="disabled" />releasing</li>
+  <li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled="disabled" checked="checked" />pushing</li>
+  <li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled="disabled" checked="checked" />test pushing</li>
+  <li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled="disabled" checked="checked" />ignore file</li>
+  <li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled="disabled" />allow specifying where to output the package to after building</li>
+  <li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled="disabled" />deps management</li>
+  <li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled="disabled" checked="checked" />running of a build script</li>
+  <li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled="disabled" checked="checked" />install after packaging</li>
+  <li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled="disabled" />package a specific version</li>
+  <li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled="disabled" />optional semver enforcement</li>
+  <li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled="disabled" />utilize rules file</li>
+  <li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled="disabled" />support copyright file</li>
+  <li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled="disabled" />support changelog</li>
+  <li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled="disabled" checked="checked" />don’t shell out for md5sums</li>
+  <li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled="disabled" />don’t shell out for rsync</li>
+  <li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled="disabled" checked="checked" />don’t shell out for find</li>
+  <li class="task-list-item"><input type="checkbox" class="task-list-item-checkbox" disabled="disabled" />pull maintainer from git config</li>
+</ul>
+
+<h2 id="contributing">Contributing</h2>
+
+<p>Bug reports and pull requests are welcome on GitHub at https://github.com/penguinpowernz/ian.</p>
+
+<h2 id="in-memory-of">In Memory Of</h2>
+
+<p>In memory of Ian Ashley Murdock (1973 - 2015) founder of the Debian project.</p>
+
+
+      <footer class="site-footer">
+        
+          <span class="site-footer-owner"><a href="https://github.com/penguinpowernz/go-ian">go-ian</a> is maintained by <a href="https://github.com/penguinpowernz">penguinpowernz</a>.</span>
+        
+        <span class="site-footer-credits">This page was generated by <a href="https://pages.github.com">GitHub Pages</a>.</span>
+      </footer>
+    </section>
+
+    
+  </body>
+</html>
