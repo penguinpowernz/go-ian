@@ -43,7 +43,7 @@ func (c Control) Write(w io.Writer) error {
 
 // WriteFile will write the control file to the given filename
 func (c Control) WriteFile(fn string) error {
-	f, err := os.OpenFile(fn, os.O_CREATE|os.O_WRONLY, 0755)
+	f, err := os.OpenFile(fn, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
 	if err != nil {
 		return err
 	}
