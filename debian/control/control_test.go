@@ -46,7 +46,7 @@ Description: This is a description
 `
 
 		Convey("when it is parsed", func() {
-			ctrl, err := Parse(s)
+			ctrl, err := Parse([]byte(s))
 			So(err, ShouldBeNil)
 
 			Convey("it should contain the long description", func() {
