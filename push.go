@@ -44,7 +44,7 @@ func Push(pushFile, pkg string) error {
 		args := bits[1:]
 		xctbl, found := util.FindExec(xctbl)
 		if !found {
-			tell.Errorf("couldn't find location of %s", xctbl)
+			tell.Errorf("couldn't find location of %s", bits[0])
 			continue
 		}
 
