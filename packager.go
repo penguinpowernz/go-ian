@@ -91,6 +91,18 @@ var DpkgDebBuild = func(br *BuildRequest) error {
 		return fmt.Errorf("failed to make package dir at %s: %s", br.debpath, err)
 	}
 
+	// ensure correct perms on ctrl dir
+	if err := os.Chmod(br.pkg.dir, 0755); err != nil {
+		return fmt.Errorf("failed to set the proper perms on the control dir")
+	}
+
+	// ensure correct perms on ctrl files
+	for _, fpath := range br.pkg.CtrlFiles() {
+		if err := os.Chmod(fpath, 0755); err != nil {
+			return fmt.Errorf("failed to set the proper perms on the control file %s", fpath)
+		}
+	}
+
 	br.debpath = filepath.Join(br.debpath, br.pkg.ctrl.Filename())
 
 	cmd := exec.Command("/usr/bin/fakeroot", "dpkg-deb", "-b", br.tmp, br.debpath)

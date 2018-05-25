@@ -2,6 +2,7 @@ package ian
 
 import (
 	"os/exec"
+	"path/filepath"
 	"strconv"
 
 	"github.com/penguinpowernz/go-ian/debian/control"
@@ -34,6 +35,12 @@ func (p *Pkg) Initialized() bool {
 // Ctrl returns the control file as a control object
 func (p *Pkg) Ctrl() *control.Control {
 	return &p.ctrl
+}
+
+// CtrlFiles returns a list of all the files in the control dir
+func (p *Pkg) CtrlFiles() []string {
+	m, _ := filepath.Glob(filepath.Join(p.CtrlDir(), "*"))
+	return m
 }
 
 // Size returns the total size of the files to be included
