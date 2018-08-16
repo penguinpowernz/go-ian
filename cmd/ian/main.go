@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 
+	"github.com/blang/semver"
 	ian "github.com/penguinpowernz/go-ian"
 	"github.com/penguinpowernz/go-ian/debian/control"
 	"github.com/penguinpowernz/go-ian/util/file"
@@ -219,11 +220,52 @@ func doSet(dir string, args []string) {
 	}
 
 	if newVer != "" {
-		pkg.Ctrl().Version = newVer
+		v := pkg.Ctrl().Version
+		var err error
+
+		switch newVer {
+		case "+M":
+			pkg.Ctrl().Version, err = incrMajorVer(v)
+		case "+m":
+			pkg.Ctrl().Version, err = incrMinorVer(v)
+		case "+p":
+			pkg.Ctrl().Version, err = incrPatchVer(v)
+		default:
+			pkg.Ctrl().Version = newVer
+		}
+
+		tell.IfFatalf(err, "couldn't set version")
 	}
 
 	err := pkg.Ctrl().WriteFile(pkg.CtrlFile())
 	tell.IfFatalf(err, "couldn't set fields")
+}
+
+func incrMajorVer(v string) (string, error) {
+	sv, err := semver.Parse(v)
+	if err != nil {
+		return v, err
+	}
+	sv.Major++
+	return sv.String(), nil
+}
+
+func incrMinorVer(v string) (string, error) {
+	sv, err := semver.Parse(v)
+	if err != nil {
+		return v, err
+	}
+	sv.Minor++
+	return sv.String(), nil
+}
+
+func incrPatchVer(v string) (string, error) {
+	sv, err := semver.Parse(v)
+	if err != nil {
+		return v, err
+	}
+	sv.Patch++
+	return sv.String(), nil
 }
 
 func printHelp() {

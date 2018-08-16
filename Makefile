@@ -1,5 +1,6 @@
 
 release:
+	go get -v ./...
 	GOOS=linux GOARCH=amd64 go build -o ian.x86_64.Linux ./cmd/ian
 	IAN_DIR=dpkg ./ian.x86_64.Linux bp
 	GOOS=darwin GOARCH=amd64 go build -o ian.x86_64.Darwin ./cmd/ian

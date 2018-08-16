@@ -64,6 +64,12 @@ The architecture and the version can be set quickly in this manner.  Other field
     ian set -a amd64
     ian set -v 1.2.3-test
 
+You can also use increments on semantic versions like so:
+
+    ian set -v +M    # increment the Major number
+    ian set -v +m    # increment the minor number
+    ian set -v +p    # increment patch level
+
 ### Packaging
 
     ian pkg [-b]

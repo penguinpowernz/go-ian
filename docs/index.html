@@ -110,6 +110,13 @@ current folder and initialize it with the appropriate debian files.</p>
 ian set -v 1.2.3-test
 </code></pre></div></div>
 
+<p>You can also use increments on semantic versions like so:</p>
+
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ian set -v +M    # increment the Major number
+ian set -v +m    # increment the minor number
+ian set -v +p    # increment patch level
+</code></pre></div></div>
+
 <h3 id="packaging">Packaging</h3>
 
 <div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ian pkg [-b]
