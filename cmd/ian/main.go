@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/blang/semver"
 	ian "github.com/penguinpowernz/go-ian"
@@ -92,8 +93,7 @@ func main() {
 		doInstall(dir)
 
 	case "info":
-		ctrl := readCtrl(dir)
-		fmt.Println(ctrl.String())
+		doInfo(dir, os.Args[2:])
 
 	case "push":
 		doPush(dir)
@@ -276,6 +276,36 @@ func incrPatchVer(v string) (string, error) {
 	return sv.String(), nil
 }
 
+func doInfo(dir string, args []string) {
+	ctrl := readCtrl(dir)
+
+	var name, ver, mntr, arch, deps bool
+	fs := flag.NewFlagSet("deps", flag.ContinueOnError)
+	fs.BoolVar(&name, "n", false, "show just the name")
+	fs.BoolVar(&ver, "v", false, "show just the version")
+	fs.BoolVar(&mntr, "m", false, "show just the maintainer")
+	fs.BoolVar(&arch, "a", false, "show just the architecture")
+	fs.BoolVar(&deps, "d", false, "show just the dependencies")
+	fs.Parse(os.Args[2:])
+
+	s := ""
+	switch {
+	case name:
+		s = ctrl.Name
+	case ver:
+		s = ctrl.Version
+	case mntr:
+		s = ctrl.Maintainer
+	case arch:
+		s = ctrl.Arch
+	case deps:
+		s = strings.Join(ctrl.Depends, ",")
+	default:
+		s = ctrl.String()
+	}
+
+	fmt.Println(s)
+}
 func printHelp() {
 	fmt.Println(`Usage: ian <command> [options]
 	-v,             Print the version
