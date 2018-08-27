@@ -81,10 +81,7 @@ func main() {
 		doSet(dir, os.Args[2:])
 
 	case "deps":
-		ctrl := readCtrl(dir)
-		for _, dep := range ctrl.Depends {
-			fmt.Println(dep)
-		}
+		doDeps(dir, os.Args[2:])
 
 	case "build":
 		doBuild(dir)
@@ -306,6 +303,45 @@ func doInfo(dir string, args []string) {
 
 	fmt.Println(s)
 }
+
+func doDeps(dir string, args []string) {
+	pkg := readPkg(dir)
+
+	var add, remove string
+	fs := flag.NewFlagSet("deps", flag.ContinueOnError)
+	fs.StringVar(&add, "a", "", "add the dep")
+	fs.StringVar(&remove, "d", "", "remove the dep")
+	fs.Parse(os.Args[2:])
+
+	if add == "" && remove == "" {
+		for _, deps := range pkg.Ctrl().Depends {
+			fmt.Println(deps)
+		}
+
+		return
+	}
+
+	if add != "" {
+		newpkgs := str.CleanStrings(strings.Split(add, " "))
+		pkg.Ctrl().Depends = append(pkg.Ctrl().Depends, newpkgs...)
+	}
+
+	if remove != "" {
+		rmdeps := str.CleanStrings(strings.Split(" ", add))
+
+		deps := strings.Join(pkg.Ctrl().Depends, " ")
+		deps = " " + deps + " "
+		for _, dep := range rmdeps {
+			deps = strings.Replace(deps, " "+dep+" ", " ", -1)
+		}
+
+		pkg.Ctrl().Depends = str.CleanStrings(strings.Split(deps, " "))
+	}
+
+	err := pkg.Ctrl().WriteFile(pkg.CtrlFile())
+	tell.IfFatalf(err, "couldn't set fields")
+}
+
 func printHelp() {
 	fmt.Println(`Usage: ian <command> [options]
 	-v,             Print the version
