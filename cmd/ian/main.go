@@ -277,7 +277,7 @@ func doInfo(dir string, args []string) {
 	ctrl := readCtrl(dir)
 
 	var name, ver, mntr, arch, deps bool
-	fs := flag.NewFlagSet("deps", flag.ContinueOnError)
+	fs := flag.NewFlagSet("info", flag.ExitOnError)
 	fs.BoolVar(&name, "n", false, "show just the name")
 	fs.BoolVar(&ver, "v", false, "show just the version")
 	fs.BoolVar(&mntr, "m", false, "show just the maintainer")
@@ -358,14 +358,14 @@ Available commands:
 	set        Modify the Debian control file
 	info       Print information for this package
 	deps       Print dependencies for this package
+	whoami     Prints your maintainer name as found in $HOME/.gitconfig
 	versions   Show all the known versions
 	version    Print the current versions
 	bpi        run build, pkg, install
 	pi         run pkg, install
 	pp         run pkg, push
 	bp         run build, pkg
-	bpp        run build, pkg push
-`)
+	bpp        run build, pkg push`)
 
 	// release    Release the current or new version
 }

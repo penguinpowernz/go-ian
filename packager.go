@@ -141,7 +141,7 @@ var CalculateMD5Sums = func(br *BuildRequest) error {
 
 	f, err := os.OpenFile(outfile, os.O_WRONLY|os.O_CREATE, 0755)
 	if err != nil {
-		return fmt.Errorf("failed to generate md5sums: %s", err)
+		return fmt.Errorf("failed to write md5sums: %s", err)
 	}
 
 	_, err = sums.Write(f)
