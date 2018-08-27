@@ -2,10 +2,13 @@ package ian
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/penguinpowernz/go-ian/util/file"
+	"github.com/penguinpowernz/go-ian/util/str"
 
 	"github.com/penguinpowernz/go-ian/debian/control"
 )
@@ -27,6 +30,10 @@ func Initialize(dir string) error {
 		return err
 	}
 
+	if mntr, ok := FindMaintainer(); ok {
+		pkg.Ctrl().Maintainer = mntr
+	}
+
 	if err := pkg.ctrl.WriteFile(pkg.CtrlFile()); err != nil {
 		return err
 	}
@@ -41,4 +48,32 @@ func Initialize(dir string) error {
 	file.EmptyDotFile(pkg.Dir(".ianpush"))
 
 	return nil
+}
+
+func FindMaintainer() (string, bool) {
+	gcpath := filepath.Join(os.Getenv("HOME"), ".gitconfig")
+	data, err := ioutil.ReadFile(gcpath)
+	if err != nil {
+		return "", false
+	}
+
+	lines := str.Lines(string(data))
+	var name, email string
+
+	for _, l := range lines {
+		l = strings.TrimSpace(l)
+		if strings.HasSuffix(l, "name =") {
+			name = strings.TrimSpace(strings.Split(l, "=")[1])
+		}
+
+		if strings.HasSuffix(l, "email =") {
+			email = strings.TrimSpace(strings.Split(l, "=")[1])
+		}
+	}
+
+	if name == "" || email == "" {
+		return "", false
+	}
+
+	return fmt.Sprintf("%s <%s>", name, email), true
 }

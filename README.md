@@ -171,7 +171,7 @@ package for ian, using ian.  Give it a try!
 - [x] don't shell out for md5sums
 - [ ] don't shell out for rsync
 - [x] don't shell out for find
-- [ ] pull maintainer from git config
+- [x] pull maintainer from git config
 
 ## Contributing
 

@@ -46,6 +46,14 @@ func main() {
 	case "init":
 		tell.IfFatalf(ian.Initialize(dir), "")
 
+	case "whoami":
+		m, ok := ian.FindMaintainer()
+		if !ok {
+			fmt.Println("???")
+		} else {
+			fmt.Println(m)
+		}
+
 	case "new":
 		dir = os.Args[2]
 		tell.IfFatalf(ian.Initialize(dir), "")
