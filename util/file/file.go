@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/yargevad/filepathx"
 )
 
 // Exists returns true if the given path exists
@@ -110,4 +112,11 @@ exit 0;
 func EmptyDotFile(path string) error {
 	_, err := os.OpenFile(path, os.O_RDONLY|os.O_CREATE, 0666)
 	return err
+}
+
+// Glob is a lazier form of filepath.Glob in that it will use filepath.Join on the provided arguments
+// before returning the resulting globbed files, ignoring the error that filepath.Glob returns
+func Glob(path ...string) []string {
+	f, _ := filepathx.Glob(filepath.Join(path...))
+	return f
 }

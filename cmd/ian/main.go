@@ -93,7 +93,12 @@ func main() {
 		doInfo(dir, os.Args[2:])
 
 	case "push":
-		doPush(dir)
+		slctr := ""
+		if len(os.Args) == 3 {
+			slctr = os.Args[2]
+		}
+
+		doPush(dir, slctr)
 
 	case "-v":
 		fmt.Println("Version", version)
@@ -118,17 +123,27 @@ func main() {
 		doInstall(dir)
 
 	case "pp":
+		slctr := ""
+		if len(os.Args) == 3 {
+			slctr = os.Args[2]
+		}
+
 		doPackage(dir)
-		doPush(dir)
+		doPush(dir, slctr)
 
 	case "bp":
 		doBuild(dir)
 		doPackage(dir)
 
 	case "bpp":
+		slctr := ""
+		if len(os.Args) == 3 {
+			slctr = os.Args[2]
+		}
+
 		doBuild(dir)
 		doPackage(dir)
-		doPush(dir)
+		doPush(dir, slctr)
 
 	default:
 		fmt.Println("unknown argument:", cmd)
@@ -197,7 +212,7 @@ func doInstall(dir string) {
 	tell.IfFatalf(cmd.Run(), "installing %s failed", pkg.DebFile())
 }
 
-func doPush(dir string) {
+func doPush(dir, slctr string) {
 	pkg := readPkg(dir)
 	if !file.Exists(pkg.PushFile()) {
 		tell.Fatalf("No .ianpush file exists")
@@ -208,7 +223,7 @@ func doPush(dir string) {
 		deb = os.Args[2]
 	}
 
-	err := ian.Push(pkg.PushFile(), deb)
+	err := ian.Push(pkg.PushFile(), deb, slctr)
 	tell.IfFatalf(err, "pushing failed")
 }
 
