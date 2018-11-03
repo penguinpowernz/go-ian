@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/penguinpowernz/go-ian/util/file"
 	"github.com/penguinpowernz/go-ian/util/str"
@@ -26,6 +27,7 @@ func DefaultPackager() (p Packager) {
 		CleanRoot,
 		CalculateMD5Sums,
 		CalculateSize,
+		PrintPackageTree,
 		DpkgDebBuild,
 	}
 }
@@ -79,6 +81,21 @@ func (pkgr Packager) BuildWithOpts(p *Pkg, opts BuildOpts) (string, error) {
 
 	br.CleanUp()
 	return br.debpath, nil
+}
+
+var PrintPackageTree = func(br *BuildRequest) error {
+	if !Debug {
+		return nil
+	}
+
+	os.Stderr.WriteString("\nResultant Package Tree\n")
+	os.Stderr.WriteString("-------------------------------------------------\n")
+	for _, fn := range file.Glob(br.tmp, "**") {
+		os.Stderr.WriteString(strings.Replace(fn, br.tmp+"/", "", -1) + "\n")
+	}
+	os.Stderr.WriteString("-------------------------------------------------\n\n")
+
+	return nil
 }
 
 // DpkgDebBuild is a packaging step that builds the package using dpkg-deb
@@ -168,11 +185,20 @@ var StageFiles = func(br *BuildRequest) error {
 
 	cmd := exec.Command("/usr/bin/rsync", args...)
 	if br.Debug {
+		os.Stderr.WriteString("\nStaging files to " + br.tmp + "\n")
+		os.Stderr.WriteString("-------------------------------------------------\n")
 		tell.Debugf("running: %s", str.CommandString(cmd))
 		cmd.Stderr = os.Stderr
 		cmd.Stdout = os.Stderr
 	}
-	return cmd.Run()
+
+	err = cmd.Run()
+
+	if br.Debug {
+		os.Stderr.WriteString("-------------------------------------------------\n\n")
+	}
+
+	return err
 }
 
 // CleanRoot is a packaging step to clean the root folder of the

@@ -16,7 +16,7 @@ import (
 	"github.com/penguinpowernz/go-ian/util/tell"
 )
 
-var version = "v1.2.0"
+var version = "v1.3.0"
 
 func main() {
 

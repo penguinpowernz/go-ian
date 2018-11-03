@@ -28,9 +28,9 @@ Simple to build / install, provided you have go setup:
 
     go get github.com/penguinpowernz/go-ian
     go install github.com/penguinpowernz/go-ian/cmd/ian
-        
+
 I will provide some binaries once I figure out how github releases section works.
-    
+
 ## Usage
 
 This tool is used for working with what Debian called "Binary packages" - that is ones that have the `DEBIAN`
@@ -41,12 +41,12 @@ scratches an itch.
 ### Creation/Initializing
 
     ian new my-package
- 
+
 Analogous to `bundle new gemname` or `rails new appname` this will create a folder called `my-package` in the
 current folder and initialize it with the appropriate debian files.
 
     ian init
-    
+
 Analagous to `git init` this will do the same as `new` but do it in the current folder.
 
 Now you will see you have a `DEBIAN` folder with a `control` and `postinst` file.
@@ -54,7 +54,7 @@ Now you will see you have a `DEBIAN` folder with a `control` and `postinst` file
 ### Info
 
     ian info
-    
+
 This will simply dump the control file contents out.
  
 ### Set fields in the control file
@@ -73,7 +73,7 @@ You can also use increments on semantic versions like so:
 ### Packaging
 
     ian pkg [-b]
-    
+
 The one you came here for.  Packages the repo in a debian package, excluding junk files like `.git` and `.gitignore`, 
 moves root files (like `README.md`) to a `/usr/share/doc` folder so you don't dirty your root partition on install.  
 The package will be output to a `pkg` directory in the root of the repo.  It will also generate the md5sums file
@@ -86,20 +86,28 @@ packaging.
 
 This will run the build script found in `DEBIAN/build` parsing it the following arguments:
 
-- root directory of the package git repository
-- architecture from the control file
-- version from the control file
+* root directory of the package git repository
+* architecture from the control file
+* version from the control file
 
 It can do whatever things you need it to do to prepare for the packaging such as building binaries, etc.
 
 ### Push
 
-    ian push [name]
+    ian push [target]
 
 Setup scripts to run in a file called `.ianpush` in the repo root and running `ian push` will run all the lines in
 the file as commands with the current package.  The package filename will be appended to each command unless `$PKG`
-is found on the line, in which case that will be replaced with the package filename.  Alternatively the package
-filename can be given as an argument.
+is found on the line, in which case that will be replaced with the package filename.  Also the target name can be
+given as an argument to push to specfic targets (supports globbing).
+
+    package_cloud push user/app-testing/debian/wheezy
+    stable: package_cloud push user/app-stable/debian/wheezy
+    devbox: scp $PKG root@192.168.1.200:~
+    s3: aws s3 cp $PKG s3://mybucket/dpkg/
+
+Note that targets requiring input will fail as there is no terminal attached to the command.  For SCP, it is recommended
+to use the SSH config files to your advantage.
 
 ### Other
 
@@ -112,14 +120,16 @@ Some other commands:
     ian version     # prints the package version
     ian versions    # prints all known versions
     ian deps        # prints the dependencies line by line
-    bpi		        # run build, pkg, install
-	pi		        # run pkg, install
-	pp		        # run pkg, push
-	bp		        # run build, pkg
-	bpp		        # run build, pkg push
+    bpi             # run build, pkg, install
+    pi              # run pkg, install
+    pp [target]     # run pkg, push
+    bp              # run build, pkg
+    bpp [target]    # run build, pkg push
 
 You can also use the envvar `IAN_DIR` in the same way that you would use `GIT_DIR` - that is, to do stuff
 with ian but from a different folder location.
+
+Use `DEBUG=1 ian pkg` to show debug logs for ian commands.
 
 ## Library Usage
 
@@ -127,12 +137,12 @@ with ian but from a different folder location.
 
 The Debian package `Control` struct could come in handy for others.  As a quick overview here's what it can do:
 
-- `Parse([]byte) (Control, error)` - parse the bytes from the control file
-- `Read(string) (Control, error)` - read the given file and parse it's contents
-- `Default() (Control)` - a default package control file
-- `ctrl.Filename() string` - the almost Debian standard filename (missing distro name)
-- `ctrl.String() string` - render the control file as a string
-- `ctrl.WriteFile(string) error` - write the string into the given filename
+* `Parse([]byte) (Control, error)` - parse the bytes from the control file
+* `Read(string) (Control, error)` - read the given file and parse it's contents
+* `Default() (Control)` - a default package control file
+* `ctrl.Filename() string` - the almost Debian standard filename (missing distro name)
+* `ctrl.String() string` - render the control file as a string
+* `ctrl.WriteFile(string) error` - write the string into the given filename
 
 Plus the exported fields on the `Control` struct that mirror the dpkg field names.
 
@@ -152,26 +162,26 @@ package for ian, using ian.  Give it a try!
 
 ## TODO
 
-- [ ] tests
-- [x] add help page
-- [ ] add subcommands help
-- [ ] releasing
-- [x] pushing
-- [x] test pushing
-- [x] ignore file
-- [ ] allow specifying where to output the package to after building
-- [ ] deps management
-- [x] running of a build script
-- [x] install after packaging
-- [ ] package a specific version
-- [ ] optional semver enforcement
-- [ ] utilize rules file
-- [ ] support copyright file
-- [ ] support changelog
-- [x] don't shell out for md5sums
-- [ ] don't shell out for rsync
-- [x] don't shell out for find
-- [x] pull maintainer from git config
+* [ ] more tests
+* [x] add help page
+* [ ] add subcommands help
+* [ ] releasing
+* [x] pushing
+* [x] test pushing
+* [x] ignore file
+* [ ] allow specifying where to output the package to after building
+* [ ] deps management
+* [x] running of a build script
+* [x] install after packaging
+* [ ] package a specific version
+* [ ] optional semver enforcement
+* [ ] utilize rules file
+* [ ] support copyright file
+* [ ] support changelog
+* [x] don't shell out for md5sums
+* [ ] don't shell out for rsync
+* [x] don't shell out for find
+* [x] pull maintainer from git config
 
 ## Contributing
 

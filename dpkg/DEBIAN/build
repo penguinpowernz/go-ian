@@ -2,9 +2,12 @@
 
 dir=$1;
 arch=$3;
+[[ "$arch" = "i386" ]] && arch="386"
+[[ "$arch" = "armhf" ]] && arch="arm"
 
 export GOPATH=`mktemp -d`;
 export GOARCH=$arch;
+unset GOBIN
 
 go get github.com/penguinpowernz/go-ian;
 go get github.com/penguinpowernz/go-ian/...;
