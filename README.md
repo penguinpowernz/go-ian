@@ -184,7 +184,7 @@ package for ian, using ian.  Give it a try!
 * [ ] don't shell out for dpkg-deb
 * [x] pull maintainer from git config
 
-# Contributor Code of Conduct
+## Contributor Code of Conduct
 
 This project adheres to No Code of Conduct.  We are all adults.  We accept anyone's contributions.  Nothing else matters.
 
