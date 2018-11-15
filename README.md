@@ -29,7 +29,7 @@ Simple to build / install, provided you have go setup:
     go get github.com/penguinpowernz/go-ian
     go install github.com/penguinpowernz/go-ian/cmd/ian
 
-I will provide some binaries once I figure out how github releases section works.
+Or you can download a pre-built binary or Debian package from [the releases page](https://github.com/penguinpowernz/go-ian/releases).
 
 ## Usage
 
@@ -181,7 +181,14 @@ package for ian, using ian.  Give it a try!
 * [x] don't shell out for md5sums
 * [ ] don't shell out for rsync
 * [x] don't shell out for find
+* [ ] don't shell out for dpkg-deb
 * [x] pull maintainer from git config
+
+# Contributor Code of Conduct
+
+This project adheres to No Code of Conduct.  We are all adults.  We accept anyone's contributions.  Nothing else matters.
+
+For more information please visit the [No Code of Conduct](https://github.com/domgetter/NCoC) homepage.
 
 ## Contributing
 
