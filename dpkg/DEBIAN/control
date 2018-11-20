@@ -1,12 +1,12 @@
 Package: ian
-Version: 1.3.0
+Version: 2.0.0
 Section: misc
 Priority: optional
 Architecture: amd64
 Maintainer: Robert McLeod <robert@autogrow.com>
 Essential: no
 Homepage: https://github.com/penguinpowernz/go-ian
-Installed-Size: 2902
+Installed-Size: 3180
 Depends: fakeroot, dpkg-dev, rsync, coreutils, findutils
 Description: Debian Package Management
   Provides a command to help with managing Debian
