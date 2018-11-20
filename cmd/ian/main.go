@@ -219,9 +219,6 @@ func doPush(dir, slctr string) {
 	}
 
 	deb := pkg.DebFile()
-	if len(os.Args) == 3 {
-		deb = os.Args[2]
-	}
 
 	err := ian.Push(pkg.PushFile(), deb, slctr)
 	tell.IfFatalf(err, "pushing failed")
