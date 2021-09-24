@@ -122,7 +122,7 @@ var DpkgDebBuild = func(br *BuildRequest) error {
 
 	br.debpath = filepath.Join(br.debpath, br.pkg.ctrl.Filename())
 
-	cmd := exec.Command("/usr/bin/fakeroot", "dpkg-deb", "-b", br.tmp, br.debpath)
+	cmd := exec.Command("/usr/bin/fakeroot", "dpkg-deb", "-b", "-Zgzip", br.tmp, br.debpath)
 	if br.Debug {
 		cmd.Stderr = os.Stderr
 		cmd.Stdout = os.Stderr
