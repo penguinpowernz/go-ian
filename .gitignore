@@ -1,3 +1,4 @@
 dpkg/pkg/*
 dpkg/usr/bin/ian
 release
+vendor
