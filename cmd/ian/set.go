@@ -73,10 +73,10 @@ func updatePkgFromFlags(flag func(string) *pflag.Flag) bool {
 }
 
 func addFieldFlags(cmd *cobra.Command) {
-	cmd.PersistentFlags().StringP("name", "n", "", "set the name")
-	cmd.PersistentFlags().StringP("arch", "a", "", "set the architecture")
-	cmd.PersistentFlags().StringP("version", "v", "", "set the version")
-	cmd.PersistentFlags().StringP("maintainer", "m", "", "set the maintainer")
-	cmd.PersistentFlags().StringP("description", "d", "", "set the description")
-	cmd.PersistentFlags().StringP("long-description", "D", "", "set the long description")
+	cmd.Flags().StringP("name", "n", "", "set the name")
+	cmd.Flags().StringP("arch", "a", "", "set the architecture")
+	cmd.Flags().StringP("version", "v", "", "set the version")
+	cmd.Flags().StringP("maintainer", "m", "", "set the maintainer")
+	cmd.Flags().StringP("description", "D", "", "set the description")
+	cmd.Flags().StringP("long-description", "L", "", "set the long description")
 }
