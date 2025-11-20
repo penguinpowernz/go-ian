@@ -38,12 +38,7 @@ folder in capitals to slap Debian packages together quickly. It uses dpkg-deb -b
 Debian package maintainers frown at but it is suitable enough for rolling your own packages quickly, and it
 scratches an itch.
 
-### Creation/Initializing
-
-    ian new my-package
-
-Analogous to `bundle new gemname` or `rails new appname` this will create a folder called `my-package` in the
-current folder and initialize it with the appropriate debian files.
+### Initializing
 
     ian init
 
@@ -55,7 +50,7 @@ Now you will see you have a `DEBIAN` folder with a `control` and `postinst` file
 
     ian info
 
-This will simply dump the control file contents out.
+This will simply dump the control file contents out.  There are flags for version, priority, section, architecture etc.
  
 ### Set fields in the control file
 
@@ -64,33 +59,14 @@ The architecture and the version can be set quickly in this manner.  Other field
     ian set -a amd64
     ian set -v 1.2.3-test
 
-You can also use increments on semantic versions like so:
-
-    ian set -v +M    # increment the Major number
-    ian set -v +m    # increment the minor number
-    ian set -v +p    # increment patch level
-
 ### Packaging
 
-    ian pkg [-b]
+    ian pkg
 
 The one you came here for.  Packages the repo in a debian package, excluding junk files like `.git` and `.gitignore`, 
 moves root files (like `README.md`) to a `/usr/share/doc` folder so you don't dirty your root partition on install.  
 The package will be output to a `pkg` directory in the root of the repo.  It will also generate the md5sums file
-and calculate the package size proir to packaging.  By adding a `-b` flag it will run the build script before
-packaging.
-
-### Build
-
-    ian build
-
-This will run the build script found in `DEBIAN/build` parsing it the following arguments:
-
-* root directory of the package git repository
-* architecture from the control file
-* version from the control file
-
-It can do whatever things you need it to do to prepare for the packaging such as building binaries, etc.
+and calculate the package size proir to packaging.
 
 ### Push
 
@@ -111,22 +87,17 @@ to use the SSH config files to your advantage.
 
 ### Other
 
+Use `-h` to get help on commands and their available flags.
+
 Some other commands:
 
-    ian install     # installs the current package
+    ian -d dpkg pkg # uses the folder called `dpkg` as the package root
     ian excludes    # shows the excluded files
     ian size        # calculates the package size (in kB)
     ian -v          # prints the ian version
-    ian version     # prints the package version
-    ian versions    # prints all known versions
     ian deps        # prints the dependencies line by line
-    bpi             # run build, pkg, install
-    pi              # run pkg, install
-    pp [target]     # run pkg, push
-    bp              # run build, pkg
-    bpp [target]    # run build, pkg push
 
-You can also use the envvar `IAN_DIR` in the same way that you would use `GIT_DIR` - that is, to do stuff
+You can also use the envvar `IAN_DIR` instead of `-d` in the same way that you would use `GIT_DIR` - that is, to do stuff
 with ian but from a different folder location.
 
 Use `DEBUG=1 ian pkg` to show debug logs for ian commands.
@@ -156,22 +127,19 @@ package for ian, using ian.  Give it a try!
     go get github.com/penguinpowernz/go-ian
     go install github.com/penguinpowernz/go-ian/cmd/ian
     cd $GOPATH/src/github.com/penguinpowernz/go-ian/dpkg
-    ian build
     ian pkg
-    sudo $GOBIN/ian install # or sudo dpkg -i pkg/ian_v1.0.0_amd64.deb
+    sudo dpkg -i pkg/ian_v1.0.0_amd64.deb
 
 ## TODO
 
 * [ ] more tests
 * [x] add help page
-* [ ] add subcommands help
-* [ ] releasing
+* [x] add subcommands help
 * [x] pushing
 * [x] test pushing
 * [x] ignore file
-* [ ] allow specifying where to output the package to after building
-* [ ] deps management
-* [x] running of a build script
+* [x] allow specifying where to output the package to after building
+* [x] deps management
 * [x] install after packaging
 * [ ] package a specific version
 * [ ] optional semver enforcement
