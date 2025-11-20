@@ -100,6 +100,21 @@ var PrintPackageTree = func(br *BuildRequest) error {
 
 // DpkgDebBuild is a packaging step that builds the package using dpkg-deb
 var DpkgDebBuild = func(br *BuildRequest) error {
+	if br.Debug {
+		os.Stderr.WriteString("\n\n*** DpkgDebBuild ***\n\n")
+	}
+
+	if br.Debug {
+		os.Stderr.WriteString("\nControl file that will be used for the package\n")
+		os.Stderr.WriteString("-------------------------------------------------\n")
+		data, err := os.ReadFile(br.pkg.CtrlFile())
+		if err != nil {
+			os.Stderr.WriteString("ERROR: failed to read the control file from " + br.pkg.dir + "\n")
+		}
+		os.Stderr.Write(data)
+		os.Stderr.WriteString("-------------------------------------------------\n\n")
+	}
+
 	if br.debpath == "" {
 		br.debpath = br.pkg.Dir("pkg")
 	}
@@ -137,6 +152,10 @@ var DpkgDebBuild = func(br *BuildRequest) error {
 
 // CalculateSize of a directory using du, excluding any given paths
 var CalculateSize = func(br *BuildRequest) error {
+	if br.Debug {
+		os.Stderr.WriteString("\n\n*** CalculateSize ***\n\n")
+	}
+
 	b, err := file.DirSize(br.tmp, br.pkg.Excludes())
 	if err != nil {
 		return fmt.Errorf("failed to calculate package size: %s", err)
@@ -150,6 +169,10 @@ var CalculateSize = func(br *BuildRequest) error {
 
 // CalculateMD5Sums is a packaging step that calculates the file sums
 var CalculateMD5Sums = func(br *BuildRequest) error {
+	if br.Debug {
+		os.Stderr.WriteString("\n\n*** CalculateMD5Sums ***\n\n")
+	}
+
 	outfile := (&Pkg{dir: br.tmp}).CtrlDir("md5sums")
 	sums, err := md5walk.Walk(br.tmp)
 	if err != nil {
@@ -176,6 +199,10 @@ var CalculateMD5Sums = func(br *BuildRequest) error {
 // StageFiles is a packaging step that stages the package files to a
 // temporary directory to work from
 var StageFiles = func(br *BuildRequest) error {
+	if br.Debug {
+		os.Stderr.WriteString("\n\n*** StageFiles ***\n\n")
+	}
+
 	var err error
 	br.tmp, err = ioutil.TempDir("/tmp", "go-ian")
 	if err != nil {
@@ -212,6 +239,10 @@ var StageFiles = func(br *BuildRequest) error {
 // CleanRoot is a packaging step to clean the root folder of the
 // package so that the target root file system is not polluted
 var CleanRoot = func(br *BuildRequest) error {
+	if br.Debug {
+		os.Stderr.WriteString("\n\n*** CleanRoot ***\n\n")
+	}
+
 	list, err := file.ListFilesIn(br.tmp)
 	if err != nil {
 		return fmt.Errorf("failed to find root files: %s", err)
