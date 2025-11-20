@@ -162,6 +162,14 @@ var CalculateMD5Sums = func(br *BuildRequest) error {
 	}
 
 	_, err = sums.Write(f)
+
+	if br.Debug {
+		os.Stderr.WriteString("\nMD5SUMS\n")
+		os.Stderr.WriteString("-------------------------------------------------\n")
+		sums.Write(os.Stderr)
+		os.Stderr.WriteString("-------------------------------------------------\n\n")
+	}
+
 	return err
 }
 
