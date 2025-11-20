@@ -34,7 +34,7 @@ var setCmd = &cobra.Command{
 func updatePkgFromFlags(flag func(string) *pflag.Flag) bool {
 	var anySet bool
 	if v := flag("arch").Value.String(); v != "" {
-		PKG.Ctrl().Version = v
+		PKG.Ctrl().Arch = v
 		fmt.Println("Architecture set to", v)
 		anySet = true
 	}
