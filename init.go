@@ -42,7 +42,6 @@ func Initialize(dir string) error {
 	file.EmptyBashScript(pkg.CtrlDir("prerm"))
 	file.EmptyBashScript(pkg.CtrlDir("postrm"))
 	file.EmptyBashScript(pkg.CtrlDir("preinst"))
-	file.EmptyBashScript(pkg.CtrlDir("build"))
 
 	file.EmptyDotFile(pkg.Dir(".ianignore"))
 	file.EmptyDotFile(pkg.Dir(".ianpush"))

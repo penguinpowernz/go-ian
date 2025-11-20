@@ -1,7 +1,6 @@
 package ian
 
 import (
-	"os/exec"
 	"path/filepath"
 	"strconv"
 
@@ -52,10 +51,4 @@ func (p *Pkg) Size() (string, error) {
 	}
 
 	return strconv.Itoa(size), nil
-}
-
-// BuildCommand returns the command to run in order to run
-// the packages build script
-func (p *Pkg) BuildCommand() *exec.Cmd {
-	return exec.Command(p.BuildFile(), p.Dir(), p.Ctrl().Version, p.Ctrl().Arch)
 }

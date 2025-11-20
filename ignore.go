@@ -40,7 +40,7 @@ func (p *Pkg) IgnoreFile() string {
 func (p *Pkg) Excludes() []string {
 	exc := p.IgnoreList()
 	exc = append(exc, []string{
-		".git", "pkg", ".gitignore", ".ianpush", ".ianignore", ".gitkeep", "DEBIAN/build",
+		".git", "pkg", ".gitignore", ".ianpush", ".ianignore", ".gitkeep",
 	}...)
 
 	return exc

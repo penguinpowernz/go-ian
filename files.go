@@ -26,11 +26,6 @@ func (p *Pkg) DocPath() string {
 	return p.Dir("usr", "share", "doc", p.ctrl.Name)
 }
 
-// BuildFile returns the filepath to the build script file
-func (p *Pkg) BuildFile() string {
-	return p.CtrlDir("build")
-}
-
 // DebFile returns the filepath to where the debian package
 // should be placed after building it
 func (p *Pkg) DebFile() string {

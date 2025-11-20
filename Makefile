@@ -4,9 +4,8 @@ LDFLAGS=-ldflags "-X main.version=${VERSION}"
 default: pkg_all
 
 build_all:
-	go get -v ./...
-	GOOS=darwin GOARCH=amd64 go build ${LDFLAGS} -o ./release/ian.amd64.Darwin ./cmd/ian
 	GOOS=linux GOARCH=arm go build ${LDFLAGS} -o ./release/ian.armhf.Linux ./cmd/ian
+	GOOS=linux GOARCH=arm64 go build ${LDFLAGS} -o ./release/ian.arm64.Linux ./cmd/ian
 	GOOS=linux GOARCH=arm GOARM=6 go build ${LDFLAGS} -o ./release/ian.armel.Linux ./cmd/ian
 	GOOS=linux GOARCH=amd64 go build ${LDFLAGS} -o ./release/ian.amd64.Linux ./cmd/ian
 	GOOS=linux GOARCH=386 go build ${LDFLAGS} -o ./release/ian.i386.Linux ./cmd/ian
