@@ -38,7 +38,11 @@ var pkgCmd = &cobra.Command{
 			}
 		}
 
-		outpath := cmd.Flag("outpath").Value.String()
+		outpathv := cmd.Flag("outpath").Value
+		var outpath string
+		if outpathv != nil {
+			outpath = outpathv.String()
+		}
 
 		pkgr := ian.DefaultPackager()
 		outfile, err := pkgr.BuildWithOpts(PKG, ian.BuildOpts{Outpath: outpath, Debug: debug})
