@@ -61,12 +61,15 @@ func FindMaintainer() (string, bool) {
 
 	for _, l := range lines {
 		l = strings.TrimSpace(l)
-		if strings.HasSuffix(l, "name =") {
-			name = strings.TrimSpace(strings.Split(l, "=")[1])
-		}
-
-		if strings.HasSuffix(l, "email =") {
-			email = strings.TrimSpace(strings.Split(l, "=")[1])
+		if parts := strings.SplitN(l, "=", 2); len(parts) == 2 {
+			key := strings.TrimSpace(parts[0])
+			val := strings.TrimSpace(parts[1])
+			switch key {
+			case "name":
+				name = val
+			case "email":
+				email = val
+			}
 		}
 	}
 

@@ -31,39 +31,47 @@ var setCmd = &cobra.Command{
 	},
 }
 
+func flagValue(flag func(string) *pflag.Flag, name string) string {
+	f := flag(name)
+	if f == nil {
+		return ""
+	}
+	return f.Value.String()
+}
+
 func updatePkgFromFlags(flag func(string) *pflag.Flag) bool {
 	var anySet bool
-	if v := flag("arch").Value.String(); v != "" {
+	if v := flagValue(flag, "arch"); v != "" {
 		PKG.Ctrl().Arch = v
 		fmt.Println("Architecture set to", v)
 		anySet = true
 	}
 
-	if v := flag("version").Value.String(); v != "" {
+	if v := flagValue(flag, "version"); v != "" {
 		PKG.Ctrl().Version = v
 		fmt.Println("Version set to", v)
 		anySet = true
 	}
 
-	if v := flag("maintainer").Value.String(); v != "" {
+	if v := flagValue(flag, "maintainer"); v != "" {
 		PKG.Ctrl().Maintainer = v
 		fmt.Println("Maintainer set to", v)
 		anySet = true
 	}
 
-	if v := flag("description").Value.String(); v != "" {
+	if v := flagValue(flag, "description"); v != "" {
 		PKG.Ctrl().Desc = v
 		fmt.Println("Description set to", v)
 		anySet = true
 	}
 
-	if v := flag("long-description").Value.String(); v != "" {
+	if v := flagValue(flag, "long-description"); v != "" {
 		PKG.Ctrl().LongDesc = v
 		fmt.Println("Long Description set to", v)
 		anySet = true
 	}
 
-	if v := flag("name").Value.String(); v != "" {
+	if v := flagValue(flag, "name"); v != "" {
 		PKG.Ctrl().Name = v
 		fmt.Println("Name set to", v)
 		anySet = true

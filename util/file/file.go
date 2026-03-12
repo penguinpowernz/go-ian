@@ -110,8 +110,11 @@ exit 0;
 
 // EmptyDotFile creates an empty dotfile at the given filepath
 func EmptyDotFile(path string) error {
-	_, err := os.OpenFile(path, os.O_RDONLY|os.O_CREATE, 0666)
-	return err
+	f, err := os.OpenFile(path, os.O_RDONLY|os.O_CREATE, 0666)
+	if err != nil {
+		return err
+	}
+	return f.Close()
 }
 
 // Glob is a lazier form of filepath.Glob in that it will use filepath.Join on the provided arguments
