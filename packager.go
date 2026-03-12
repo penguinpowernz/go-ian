@@ -183,6 +183,7 @@ var CalculateMD5Sums = func(br *BuildRequest) error {
 	if err != nil {
 		return fmt.Errorf("failed to write md5sums: %s", err)
 	}
+	defer f.Close()
 
 	_, err = sums.Write(f)
 

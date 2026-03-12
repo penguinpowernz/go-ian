@@ -16,7 +16,7 @@ var initCmd = &cobra.Command{
 	Short: "Initialize the current folder as a Debian package",
 	Long:  ``,
 	Run: func(cmd *cobra.Command, args []string) {
-		tell.IfFatalf(ian.Initialize(DIR), "")
+		tell.IfFatalf(ian.Initialize(DIR), "failed to initialize")
 
 		PKG = readPkg(DIR)
 

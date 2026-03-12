@@ -47,8 +47,8 @@ func (p *Pkg) CtrlFiles() []string {
 func (p *Pkg) Size() (string, error) {
 	size, err := file.DirSize(p.Dir(), p.Excludes())
 	if err != nil {
-		size = size / 1024
+		return "", err
 	}
 
-	return strconv.Itoa(size), nil
+	return strconv.Itoa(size / 1024), nil
 }

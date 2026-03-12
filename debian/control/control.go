@@ -47,6 +47,7 @@ func (c Control) WriteFile(fn string) error {
 	if err != nil {
 		return err
 	}
+	defer f.Close()
 
 	return c.Write(f)
 }
