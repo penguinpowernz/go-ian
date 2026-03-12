@@ -40,26 +40,63 @@ func (p *Pkg) IgnoreFile() string {
 	return p.Dir(".ianignore")
 }
 
+// IncludeFile returns the path to the packages include file
+func (p *Pkg) IncludeFile() string {
+	return p.Dir(".ianinclude")
+}
+
+// IncludeList returns the include patterns from the .ianinclude file.
+// If there is no include file then an empty slice is returned.
+func (p *Pkg) IncludeList() []string {
+	data, err := ioutil.ReadFile(p.IncludeFile())
+	if err != nil {
+		return []string{}
+	}
+
+	return str.CleanStrings(str.Lines(string(data)))
+}
+
 // Excludes provides things in the repo to be excluded from the package
 func (p *Pkg) Excludes() []string {
 	exc := p.IgnoreList()
 	exc = append(exc, []string{
-		".git", "pkg", ".gitignore", ".ianpush", ".ianignore", ".gitkeep",
+		".git", "pkg", ".gitignore", ".ianpush", ".ianignore", ".ianinclude", ".gitkeep",
 	}...)
 
 	return exc
 }
 
-// ListFiles returns the list of files that would be included in the package,
-// using rsync --list-only with the same exclude rules as the actual build.
-func (p *Pkg) ListFiles() ([]string, error) {
-	args := []string{"-rav", "--list-only"}
+// FilterArgs returns the ordered rsync filter arguments: includes first, then excludes.
+// If includes are specified, everything not explicitly included is also excluded.
+func (p *Pkg) FilterArgs() []string {
+	var args []string
+
+	includes := p.IncludeList()
+	for _, s := range includes {
+		if s == "" {
+			continue
+		}
+		args = append(args, fmt.Sprintf("--include=%s", s))
+	}
+	if len(includes) > 0 {
+		args = append(args, "--exclude=*")
+	}
+
 	for _, s := range p.Excludes() {
 		if s == "" {
 			continue
 		}
 		args = append(args, fmt.Sprintf("--exclude=%s", s))
 	}
+
+	return args
+}
+
+// ListFiles returns the list of files that would be included in the package,
+// using rsync --list-only with the same exclude rules as the actual build.
+func (p *Pkg) ListFiles() ([]string, error) {
+	args := []string{"-rav", "--list-only"}
+	args = append(args, p.FilterArgs()...)
 	args = append(args, p.Dir()+"/")
 
 	var out bytes.Buffer

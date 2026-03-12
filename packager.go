@@ -211,12 +211,7 @@ var StageFiles = func(br *BuildRequest) error {
 	}
 
 	args := []string{"-rav"}
-	for _, s := range br.pkg.Excludes() {
-		if s == "" {
-			continue
-		}
-		args = append(args, fmt.Sprintf("--exclude=%s", s))
-	}
+	args = append(args, br.pkg.FilterArgs()...)
 	args = append(args, br.pkg.Dir()+"/", br.tmp)
 
 	cmd := exec.Command("/usr/bin/rsync", args...)
