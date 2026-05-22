@@ -35,8 +35,8 @@ func DefaultPackager() (p Packager) {
 // BuildRequest is like a context object for packager strategies
 // to make us of and share knowledge
 type BuildRequest struct {
-	pkg     *Pkg
-	tmp     string
+	Pkg     *Pkg
+	Tmp     string
 	debpath string
 	Debug   bool
 }
@@ -44,7 +44,7 @@ type BuildRequest struct {
 // CleanUp is run at the end of the package build to clean up
 // any leftover resources
 func (br *BuildRequest) CleanUp() {
-	_ = os.RemoveAll(br.tmp)
+	_ = os.RemoveAll(br.Tmp)
 }
 
 // PackagerStrategy is a function that represents a strategy or
@@ -70,7 +70,7 @@ func (pkgr Packager) Build(p *Pkg) (string, error) {
 
 // BuildWithOpts does the same as build but with specifc options
 func (pkgr Packager) BuildWithOpts(p *Pkg, opts BuildOpts) (string, error) {
-	br := &BuildRequest{pkg: p, debpath: opts.Outpath, Debug: opts.Debug}
+	br := &BuildRequest{Pkg: p, debpath: opts.Outpath, Debug: opts.Debug}
 
 	for i, fn := range pkgr {
 		err := fn(br)
@@ -90,8 +90,8 @@ var PrintPackageTree = func(br *BuildRequest) error {
 
 	os.Stderr.WriteString("\nResultant Package Tree\n")
 	os.Stderr.WriteString("-------------------------------------------------\n")
-	for _, fn := range file.Glob(br.tmp, "**") {
-		os.Stderr.WriteString(strings.Replace(fn, br.tmp+"/", "", -1) + "\n")
+	for _, fn := range file.Glob(br.Tmp, "**") {
+		os.Stderr.WriteString(strings.Replace(fn, br.Tmp+"/", "", -1) + "\n")
 	}
 	os.Stderr.WriteString("-------------------------------------------------\n\n")
 
@@ -107,16 +107,16 @@ var DpkgDebBuild = func(br *BuildRequest) error {
 	if br.Debug {
 		os.Stderr.WriteString("\nControl file that will be used for the package\n")
 		os.Stderr.WriteString("-------------------------------------------------\n")
-		data, err := os.ReadFile(br.pkg.CtrlFile())
+		data, err := os.ReadFile(br.Pkg.CtrlFile())
 		if err != nil {
-			os.Stderr.WriteString("ERROR: failed to read the control file from " + br.pkg.dir + "\n")
+			os.Stderr.WriteString("ERROR: failed to read the control file from " + br.Pkg.dir + "\n")
 		}
 		os.Stderr.Write(data)
 		os.Stderr.WriteString("-------------------------------------------------\n\n")
 	}
 
 	if br.debpath == "" {
-		br.debpath = br.pkg.Dir("pkg")
+		br.debpath = br.Pkg.Dir("pkg")
 	}
 
 	if err := os.MkdirAll(br.debpath, 0755); err != nil {
@@ -124,27 +124,27 @@ var DpkgDebBuild = func(br *BuildRequest) error {
 	}
 
 	// ensure correct perms on ctrl dir
-	if err := os.Chmod(br.pkg.dir, 0755); err != nil {
+	if err := os.Chmod(br.Pkg.dir, 0755); err != nil {
 		return fmt.Errorf("failed to set the proper perms on the control dir")
 	}
 
 	// ensure correct perms on ctrl files
-	for _, fpath := range br.pkg.CtrlFiles() {
+	for _, fpath := range br.Pkg.CtrlFiles() {
 		if err := os.Chmod(fpath, 0755); err != nil {
 			return fmt.Errorf("failed to set the proper perms on the control file %s", fpath)
 		}
 	}
 
-	br.debpath = filepath.Join(br.debpath, br.pkg.ctrl.Filename())
+	br.debpath = filepath.Join(br.debpath, br.Pkg.ctrl.Filename())
 
-	cmd := exec.Command("/usr/bin/fakeroot", "dpkg-deb", "-b", "-Zgzip", br.tmp, br.debpath)
+	cmd := exec.Command("/usr/bin/fakeroot", "dpkg-deb", "-b", "-Zgzip", br.Tmp, br.debpath)
 	if br.Debug {
 		cmd.Stderr = os.Stderr
 		cmd.Stdout = os.Stderr
 	}
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to build package %s from %s: %s", br.debpath, br.tmp, err)
+		return fmt.Errorf("failed to build package %s from %s: %s", br.debpath, br.Tmp, err)
 	}
 
 	return nil
@@ -156,14 +156,14 @@ var CalculateSize = func(br *BuildRequest) error {
 		os.Stderr.WriteString("\n\n*** CalculateSize ***\n\n")
 	}
 
-	b, err := file.DirSize(br.tmp, br.pkg.Excludes())
+	b, err := file.DirSize(br.Tmp, br.Pkg.Excludes())
 	if err != nil {
 		return fmt.Errorf("failed to calculate package size: %s", err)
 	}
 
-	br.pkg.ctrl.Size = strconv.Itoa(b / 1024)
-	br.pkg.ctrl.WriteFile((&Pkg{dir: br.tmp}).CtrlFile())
-	br.pkg.ctrl.WriteFile(br.pkg.CtrlFile())
+	br.Pkg.ctrl.Size = strconv.Itoa(b / 1024)
+	br.Pkg.ctrl.WriteFile((&Pkg{dir: br.Tmp}).CtrlFile())
+	br.Pkg.ctrl.WriteFile(br.Pkg.CtrlFile())
 	return nil
 }
 
@@ -173,8 +173,8 @@ var CalculateMD5Sums = func(br *BuildRequest) error {
 		os.Stderr.WriteString("\n\n*** CalculateMD5Sums ***\n\n")
 	}
 
-	outfile := (&Pkg{dir: br.tmp}).CtrlDir("md5sums")
-	sums, err := md5walk.Walk(br.tmp)
+	outfile := (&Pkg{dir: br.Tmp}).CtrlDir("md5sums")
+	sums, err := md5walk.Walk(br.Tmp)
 	if err != nil {
 		return fmt.Errorf("failed to generate md5sums: %s", err)
 	}
@@ -205,23 +205,23 @@ var StageFiles = func(br *BuildRequest) error {
 	}
 
 	var err error
-	br.tmp, err = ioutil.TempDir("/tmp", "go-ian")
+	br.Tmp, err = ioutil.TempDir("/tmp", "go-ian")
 	if err != nil {
 		return fmt.Errorf("couldn't make tmp dir: %s", err)
 	}
 
 	args := []string{"-rav"}
-	for _, s := range br.pkg.Excludes() {
+	for _, s := range br.Pkg.Excludes() {
 		if s == "" {
 			continue
 		}
 		args = append(args, fmt.Sprintf("--exclude=%s", s))
 	}
-	args = append(args, br.pkg.Dir()+"/", br.tmp)
+	args = append(args, br.Pkg.Dir()+"/", br.Tmp)
 
 	cmd := exec.Command("/usr/bin/rsync", args...)
 	if br.Debug {
-		os.Stderr.WriteString("\nStaging files to " + br.tmp + "\n")
+		os.Stderr.WriteString("\nStaging files to " + br.Tmp + "\n")
 		os.Stderr.WriteString("-------------------------------------------------\n")
 		tell.Debugf("running: %s", str.CommandString(cmd))
 		cmd.Stderr = os.Stderr
@@ -244,12 +244,12 @@ var CleanRoot = func(br *BuildRequest) error {
 		os.Stderr.WriteString("\n\n*** CleanRoot ***\n\n")
 	}
 
-	list, err := file.ListFilesIn(br.tmp)
+	list, err := file.ListFilesIn(br.Tmp)
 	if err != nil {
 		return fmt.Errorf("failed to find root files: %s", err)
 	}
 
-	docpath := filepath.Join(br.tmp, "usr", "share", "doc", br.pkg.ctrl.Name)
+	docpath := filepath.Join(br.Tmp, "usr", "share", "doc", br.Pkg.ctrl.Name)
 	if err := os.MkdirAll(docpath, 0755); err != nil {
 		return fmt.Errorf("failed to create the doc path %s: %s", docpath, err)
 	}
