@@ -19,7 +19,7 @@ func Ignored(dir string) ([]string, error) {
 		return ign, err
 	}
 
-	ign = str.CleanStrings(str.Lines(string(data)))
+	ign = filterComments(str.CleanStrings(str.Lines(string(data))))
 	return ign, nil
 }
 
@@ -32,7 +32,19 @@ func (p *Pkg) IgnoreList() []string {
 		return []string{}
 	}
 
-	return str.CleanStrings(str.Lines(string(data)))
+	return filterComments(str.CleanStrings(str.Lines(string(data))))
+}
+
+// filterComments removes blank lines and lines starting with '#' from a list of patterns
+func filterComments(lines []string) []string {
+	out := lines[:0]
+	for _, l := range lines {
+		if l == "" || strings.HasPrefix(l, "#") {
+			continue
+		}
+		out = append(out, l)
+	}
+	return out
 }
 
 // IgnoreFile returns the path to the packages ignore file
@@ -44,7 +56,7 @@ func (p *Pkg) IgnoreFile() string {
 func (p *Pkg) Excludes() []string {
 	exc := p.IgnoreList()
 	exc = append(exc, []string{
-		".git", "pkg", ".gitignore", ".ianpush", ".ianignore", ".gitkeep",
+		".git", "pkg", ".gitignore", ".ianpush", ".ianignore", ".gitkeep", "./.*",
 	}...)
 
 	return exc
