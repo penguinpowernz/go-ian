@@ -14,7 +14,7 @@ func init() {
 }
 
 var md5sumsCmd = &cobra.Command{
-	Use:   "md5",
+	Use:   "sums",
 	Short: "Show MD5 sums of the files that would be packaged",
 	Long:  `Stage files as if building a package, then print MD5 sums to stdout without finalizing the build`,
 	Run: func(cmd *cobra.Command, args []string) {
