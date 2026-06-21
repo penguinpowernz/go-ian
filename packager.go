@@ -35,10 +35,11 @@ func DefaultPackager() (p Packager) {
 // BuildRequest is like a context object for packager strategies
 // to make us of and share knowledge
 type BuildRequest struct {
-	Pkg     *Pkg
-	Tmp     string
-	debpath string
-	Debug   bool
+	Pkg          *Pkg
+	Tmp          string
+	debpath      string
+	Debug        bool
+	PrintMD5Sums bool
 }
 
 // CleanUp is run at the end of the package build to clean up
@@ -56,8 +57,9 @@ type PackagerStrategy func(br *BuildRequest) error
 type Packager []PackagerStrategy
 
 type BuildOpts struct {
-	Outpath string
-	Debug   bool
+	Outpath      string
+	Debug        bool
+	PrintMD5Sums bool
 }
 
 // Build will create a debian package from the given control file and directory. It does this by
@@ -70,7 +72,7 @@ func (pkgr Packager) Build(p *Pkg) (string, error) {
 
 // BuildWithOpts does the same as build but with specifc options
 func (pkgr Packager) BuildWithOpts(p *Pkg, opts BuildOpts) (string, error) {
-	br := &BuildRequest{Pkg: p, debpath: opts.Outpath, Debug: opts.Debug}
+	br := &BuildRequest{Pkg: p, debpath: opts.Outpath, Debug: opts.Debug, PrintMD5Sums: opts.PrintMD5Sums}
 
 	for i, fn := range pkgr {
 		err := fn(br)
@@ -187,7 +189,7 @@ var CalculateMD5Sums = func(br *BuildRequest) error {
 
 	_, err = sums.Write(f)
 
-	if br.Debug {
+	if br.PrintMD5Sums || br.Debug {
 		os.Stderr.WriteString("\nMD5SUMS\n")
 		os.Stderr.WriteString("-------------------------------------------------\n")
 		sums.Write(os.Stderr)

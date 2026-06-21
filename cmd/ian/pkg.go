@@ -12,7 +12,8 @@ func init() {
 	pkgCmd.Flags().StringP("outpath", "o", "", "output path (the push command won't see files in this dir)")
 	pkgCmd.Flags().BoolP("debug", "x", false, "debug mode")
 	pkgCmd.Flags().BoolP("dry-run", "n", false, "print files that would be included without building")
-	pkgCmd.Flags().BoolP("quiet", "q", false, "suppress file list when building")
+	pkgCmd.Flags().BoolP("quiet", "q", false, "suppress output when building")
+	pkgCmd.Flags().BoolP("file-list", "f", false, "print file list to stderr instead of md5sums")
 	rootCmd.AddCommand(pkgCmd)
 }
 
@@ -26,12 +27,13 @@ var pkgCmd = &cobra.Command{
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
 		quiet, _ := cmd.Flags().GetBool("quiet")
 		debug, _ := cmd.Flags().GetBool("debug")
+		fileList, _ := cmd.Flags().GetBool("file-list")
 
-		if dryRun || (!quiet && !debug) {
+		if dryRun || (fileList && !quiet && !debug) {
 			files, err := PKG.ListFiles()
 			tell.IfFatalf(err, "failed to list package files")
 			for _, f := range files {
-				fmt.Println(f)
+				fmt.Fprintln(cmd.ErrOrStderr(), f)
 			}
 			if dryRun {
 				return
@@ -45,7 +47,7 @@ var pkgCmd = &cobra.Command{
 		}
 
 		pkgr := ian.DefaultPackager()
-		outfile, err := pkgr.BuildWithOpts(PKG, ian.BuildOpts{Outpath: outpath, Debug: debug})
+		outfile, err := pkgr.BuildWithOpts(PKG, ian.BuildOpts{Outpath: outpath, Debug: debug, PrintMD5Sums: !quiet && !fileList})
 		tell.IfFatalf(err, "packaging failed")
 		fmt.Println(outfile)
 	},
