@@ -1,4 +1,4 @@
-dpkg/pkg/*
-dpkg/usr/bin/ian
+*.deb
+usr/bin/ian
 release
 vendor
