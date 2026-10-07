@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
+	"github.com/penguinpowernz/go-ian/util/git"
 	"github.com/penguinpowernz/go-ian/util/tell"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -47,6 +49,15 @@ func updatePkgFromFlags(flag func(string) *pflag.Flag) bool {
 		anySet = true
 	}
 
+	if f := flag("git-version"); f != nil && f.Value.String() == "true" {
+		v, err := git.Describe(DIR)
+		tell.IfFatalf(err, "couldn't get the version from git")
+		v = strings.TrimPrefix(v, "v")
+		PKG.Ctrl().Version = v
+		fmt.Println("Version set to", v, "(from git)")
+		anySet = true
+	}
+
 	if v := flagValue(flag, "version"); v != "" {
 		PKG.Ctrl().Version = v
 		fmt.Println("Version set to", v)
@@ -84,6 +95,7 @@ func addFieldFlags(cmd *cobra.Command) {
 	cmd.Flags().StringP("name", "n", "", "set the name")
 	cmd.Flags().StringP("arch", "a", "", "set the architecture")
 	cmd.Flags().StringP("version", "v", "", "set the version")
+	cmd.Flags().BoolP("git-version", "V", false, "set the version from git describe (tag-commit-dirty)")
 	cmd.Flags().StringP("maintainer", "m", "", "set the maintainer")
 	cmd.Flags().StringP("description", "D", "", "set the description")
 	cmd.Flags().StringP("long-description", "L", "", "set the long description")
