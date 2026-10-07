@@ -12,7 +12,7 @@ func init() {
 	pkgCmd.Flags().StringP("outpath", "o", "", "output path (the push command won't see files in this dir)")
 	pkgCmd.Flags().BoolP("debug", "x", false, "debug mode")
 	pkgCmd.Flags().BoolP("dry-run", "n", false, "print files that would be included without building")
-	pkgCmd.Flags().BoolP("quiet", "q", false, "suppress output when building")
+	pkgCmd.Flags().CountP("quiet", "q", "suppress the md5sums listing, -qq also suppresses the package filename")
 	pkgCmd.Flags().BoolP("file-list", "f", false, "print file list to stderr instead of md5sums")
 	pkgCmd.Flags().BoolP("insecure", "k", false, "skip md5sum verification (warn instead of failing)")
 	pkgCmd.Flags().BoolP("no-package-check", "K", false, "skip rechecking the built package against the manifest")
@@ -27,11 +27,15 @@ var pkgCmd = &cobra.Command{
 		PKG = readPkg(DIR)
 
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
-		quiet, _ := cmd.Flags().GetBool("quiet")
+		quietCount, _ := cmd.Flags().GetCount("quiet")
 		debug, _ := cmd.Flags().GetBool("debug")
 		fileList, _ := cmd.Flags().GetBool("file-list")
 		insecure, _ := cmd.Flags().GetBool("insecure")
 		noPkgCheck, _ := cmd.Flags().GetBool("no-package-check")
+
+		// -q silences the md5sums listing, -qq also silences the filename
+		quiet := quietCount > 0
+		silent := quietCount > 1
 
 		if dryRun || (fileList && !quiet && !debug) {
 			m, err := PKG.Manifest()
@@ -54,11 +58,14 @@ var pkgCmd = &cobra.Command{
 		outfile, err := pkgr.BuildWithOpts(PKG, ian.BuildOpts{
 			Outpath:          outpath,
 			Debug:            debug,
-			PrintMD5Sums:     !quiet && !fileList,
+			Quiet:            quiet || fileList,
 			Insecure:         insecure,
 			SkipPackageCheck: noPkgCheck,
 		})
 		tell.IfFatalf(err, "packaging failed")
-		fmt.Println(outfile)
+
+		if !silent {
+			fmt.Println(outfile)
+		}
 	},
 }

@@ -35,7 +35,7 @@ func DefaultPackager() (p Packager) {
 		VerifyManifest,
 		StageFiles,
 		CalculateSize,
-		PrintPackageTree,
+		VerifyStaging,
 		DpkgDebBuild,
 		VerifyPackage,
 	}
@@ -44,12 +44,14 @@ func DefaultPackager() (p Packager) {
 // BuildRequest is like a context object for packager strategies
 // to make us of and share knowledge
 type BuildRequest struct {
-	Pkg          *Pkg
-	Tmp          string
-	debpath      string
-	Debug        bool
-	PrintMD5Sums bool
-	Insecure     bool
+	Pkg     *Pkg
+	Tmp     string
+	debpath string
+	Debug   bool
+
+	// Quiet suppresses the md5sums listing printed while staging
+	Quiet    bool
+	Insecure bool
 
 	// SkipPackageCheck skips the post-build verification of the .deb entirely,
 	// rather than downgrading its failures to warnings the way Insecure does
@@ -73,15 +75,16 @@ type Packager []PackagerStrategy
 type BuildOpts struct {
 	Outpath          string
 	Debug            bool
-	PrintMD5Sums     bool
+	Quiet            bool
 	Insecure         bool
 	SkipPackageCheck bool
 }
 
 // Build will create a debian package from the given control file and directory. It does this by
-// using rsync to copy the repo to a temp dir, excluded unwanted files and moving any files in the root
-// of the package to a /usr/share/doc folder.  Then it calculates the package size, file checksums and
-// calls dpkg-deb to build the package.  The path to the package and an error (if any) is returned.
+// verifying the files listed in DEBIAN/md5sums against their recorded sums, copying just those
+// files to a temp dir, calculating the package size and calling dpkg-deb to build the package.
+// The built package is then checked back against the manifest.  The path to the package and an
+// error (if any) is returned.
 func (pkgr Packager) Build(p *Pkg) (string, error) {
 	return pkgr.BuildWithOpts(p, BuildOpts{Debug: Debug})
 }
@@ -92,7 +95,7 @@ func (pkgr Packager) BuildWithOpts(p *Pkg, opts BuildOpts) (string, error) {
 		Pkg:              p,
 		debpath:          opts.Outpath,
 		Debug:            opts.Debug,
-		PrintMD5Sums:     opts.PrintMD5Sums,
+		Quiet:            opts.Quiet,
 		Insecure:         opts.Insecure,
 		SkipPackageCheck: opts.SkipPackageCheck,
 	}
@@ -106,21 +109,6 @@ func (pkgr Packager) BuildWithOpts(p *Pkg, opts BuildOpts) (string, error) {
 
 	br.CleanUp()
 	return br.debpath, nil
-}
-
-var PrintPackageTree = func(br *BuildRequest) error {
-	if !Debug {
-		return nil
-	}
-
-	os.Stderr.WriteString("\nResultant Package Tree\n")
-	os.Stderr.WriteString("-------------------------------------------------\n")
-	for _, fn := range file.Glob(br.Tmp, "**") {
-		os.Stderr.WriteString(strings.Replace(fn, br.Tmp+"/", "", -1) + "\n")
-	}
-	os.Stderr.WriteString("-------------------------------------------------\n\n")
-
-	return nil
 }
 
 // DpkgDebBuild is a packaging step that builds the package using dpkg-deb
@@ -196,6 +184,11 @@ var CalculateSize = func(br *BuildRequest) error {
 	br.Pkg.ctrl.Size = strconv.Itoa(b / 1024)
 	br.Pkg.ctrl.WriteFile((&Pkg{dir: br.Tmp}).CtrlFile())
 	br.Pkg.ctrl.WriteFile(br.Pkg.CtrlFile())
+
+	if br.Debug {
+		fmt.Fprintf(os.Stderr, "installed size: %s kB (%d bytes)\n", br.Pkg.ctrl.Size, b)
+	}
+
 	return nil
 }
 
@@ -247,6 +240,27 @@ var VerifyPackage = func(br *BuildRequest) error {
 		return fmt.Errorf("failed to read the packaged md5sums: %s", err)
 	}
 
+	if br.Debug {
+		os.Stderr.WriteString("comparing the packaged md5sums against the manifest\n")
+		os.Stderr.WriteString("-------------------------------------------------\n")
+		shippedSums := make(map[string]string, len(shipped))
+		for _, e := range shipped {
+			shippedSums[e.Path] = e.Sum
+		}
+		for _, e := range m {
+			sum, ok := shippedSums[e.Path]
+			switch {
+			case !ok:
+				fmt.Fprintf(os.Stderr, "  ABSENT    %s  %s\n", e.Sum, e.Path)
+			case sum == e.Sum:
+				fmt.Fprintf(os.Stderr, "  ok        %s  %s\n", e.Sum, e.Path)
+			default:
+				fmt.Fprintf(os.Stderr, "  DIFFERS   %s  %s (packaged %s)\n", e.Sum, e.Path, sum)
+			}
+		}
+		os.Stderr.WriteString("-------------------------------------------------\n\n")
+	}
+
 	problems = append(problems, diffManifests(m, shipped)...)
 
 	// 2. the files themselves, rehashed from the package contents
@@ -256,22 +270,45 @@ var VerifyPackage = func(br *BuildRequest) error {
 		return fmt.Errorf("failed to extract %s: %s: %s", br.debpath, err, strings.TrimSpace(string(out)))
 	}
 
+	if br.Debug {
+		os.Stderr.WriteString("rehashing the files extracted from " + br.debpath + "\n")
+		os.Stderr.WriteString("-------------------------------------------------\n")
+	}
+
 	for _, e := range m {
 		path := filepath.Join(fsysDir, e.Path)
 		if !file.Exists(path) {
+			if br.Debug {
+				fmt.Fprintf(os.Stderr, "  MISSING   %s  %s\n", e.Sum, e.Path)
+			}
 			problems = append(problems, fmt.Sprintf("%s: registered but not in the built package", e.Path))
 			continue
 		}
 
 		sum, err := Sum(path)
 		if err != nil {
+			if br.Debug {
+				fmt.Fprintf(os.Stderr, "  ERROR     %s  %s (%s)\n", e.Sum, e.Path, err)
+			}
 			problems = append(problems, fmt.Sprintf("%s: %s", e.Path, err))
 			continue
 		}
 
 		if sum != e.Sum {
+			if br.Debug {
+				fmt.Fprintf(os.Stderr, "  MISMATCH  %s  %s (got %s)\n", e.Sum, e.Path, sum)
+			}
 			problems = append(problems, fmt.Sprintf("%s: packaged file does not match the manifest (want %s, got %s)", e.Path, e.Sum, sum))
+			continue
 		}
+
+		if br.Debug {
+			fmt.Fprintf(os.Stderr, "  ok        %s  %s\n", sum, e.Path)
+		}
+	}
+
+	if br.Debug {
+		os.Stderr.WriteString("-------------------------------------------------\n\n")
 	}
 
 	// anything in the package that was never registered should not be there
@@ -291,6 +328,10 @@ var VerifyPackage = func(br *BuildRequest) error {
 			}
 		}
 
+		if br.Debug {
+			fmt.Fprintf(os.Stderr, "  UNKNOWN   %s (in the package but not registered)\n", rel)
+		}
+
 		problems = append(problems, fmt.Sprintf("%s: in the built package but not registered", rel))
 		return nil
 	})
@@ -307,7 +348,7 @@ var VerifyPackage = func(br *BuildRequest) error {
 	}
 
 	if br.Debug {
-		os.Stderr.WriteString(fmt.Sprintf("verified %d file(s) in %s\n", len(m), br.debpath))
+		fmt.Fprintf(os.Stderr, "verified %d file(s) in %s, %d problem(s)\n", len(m), br.debpath, len(problems))
 	}
 
 	return nil
@@ -365,11 +406,236 @@ var VerifyManifest = func(br *BuildRequest) error {
 		return fmt.Errorf("no files registered in %s, use `ian add <file>` to register them", br.Pkg.ManifestFile())
 	}
 
-	problems, err := br.Pkg.Verify(br.Insecure)
+	statuses, err := br.Pkg.Status()
+	if err != nil {
+		return fmt.Errorf("failed to check the manifest: %s", err)
+	}
+
+	if br.Debug {
+		os.Stderr.WriteString("checking the repo files against " + br.Pkg.ManifestFile() + "\n")
+		os.Stderr.WriteString("-------------------------------------------------\n")
+	}
+
+	var problems []string
+	for _, st := range statuses {
+		if br.Debug {
+			// name the repo file that was summed, which for a doc file is not
+			// the path it takes in the package
+			shown := st.Path
+			if st.IsDoc() {
+				shown = fmt.Sprintf("%s -> %s", st.Source, st.Path)
+			}
+
+			switch st.State {
+			case StateOK:
+				fmt.Fprintf(os.Stderr, "  ok        %s  %s\n", st.Want, shown)
+			case StateMissing:
+				fmt.Fprintf(os.Stderr, "  MISSING   %s  %s\n", st.Want, shown)
+			case StateError:
+				fmt.Fprintf(os.Stderr, "  ERROR     %s  %s (%s)\n", st.Want, shown, st.Err)
+			default:
+				fmt.Fprintf(os.Stderr, "  MISMATCH  %s  %s (got %s)\n", st.Want, shown, st.Got)
+			}
+		}
+
+		if msg := st.Problem(); msg != "" {
+			problems = append(problems, msg)
+		}
+	}
+
+	if br.Debug {
+		os.Stderr.WriteString("-------------------------------------------------\n\n")
+	}
+
 	for _, p := range problems {
 		os.Stderr.WriteString("WARNING: " + p + "\n")
 	}
-	return err
+
+	if len(problems) > 0 && !br.Insecure {
+		return fmt.Errorf("md5sum verification failed for %d file(s)", len(problems))
+	}
+
+	return nil
+}
+
+// VerifyStaging is a packaging step that checks the staged tree just before
+// dpkg-deb is called, which is the last point at which a problem can be caught
+// before it is sealed into a package.  It checks two things:
+//
+//  1. the staged DEBIAN/md5sums against the files staged alongside it, which is
+//     what dpkg and debsums will see once the package is installed
+//  2. the manifest in the repo against those same staged files, so that a file
+//     altered between verification and staging is caught
+//
+// Like the other verification steps an insecure build only warns.
+var VerifyStaging = func(br *BuildRequest) error {
+	if br.Debug {
+		os.Stderr.WriteString("\n\n*** VerifyStaging ***\n\n")
+	}
+
+	staged := &Pkg{dir: br.Tmp}
+
+	stagedManifest, err := staged.Manifest()
+	if err != nil {
+		return fmt.Errorf("failed to read the staged manifest: %s", err)
+	}
+
+	repoManifest, err := br.Pkg.Manifest()
+	if err != nil {
+		return fmt.Errorf("failed to read manifest: %s", err)
+	}
+
+	var problems []string
+
+	// 1. the staged manifest against the staged files
+	if br.Debug {
+		os.Stderr.WriteString("checking the staged files against the staged md5sums\n")
+		os.Stderr.WriteString("-------------------------------------------------\n")
+	}
+
+	for _, e := range stagedManifest {
+		path := filepath.Join(br.Tmp, e.Path)
+
+		if !file.Exists(path) {
+			if br.Debug {
+				fmt.Fprintf(os.Stderr, "  MISSING   %s  %s\n", e.Sum, e.Path)
+			}
+			problems = append(problems, fmt.Sprintf("%s: listed in the staged md5sums but not staged", e.Path))
+			continue
+		}
+
+		sum, err := Sum(path)
+		if err != nil {
+			if br.Debug {
+				fmt.Fprintf(os.Stderr, "  ERROR     %s  %s (%s)\n", e.Sum, e.Path, err)
+			}
+			problems = append(problems, fmt.Sprintf("%s: %s", e.Path, err))
+			continue
+		}
+
+		if sum != e.Sum {
+			if br.Debug {
+				fmt.Fprintf(os.Stderr, "  MISMATCH  %s  %s (got %s)\n", e.Sum, e.Path, sum)
+			}
+			problems = append(problems, fmt.Sprintf("%s: staged file does not match the staged md5sums (want %s, got %s)", e.Path, e.Sum, sum))
+			continue
+		}
+
+		if br.Debug {
+			fmt.Fprintf(os.Stderr, "  ok        %s  %s\n", sum, e.Path)
+		}
+	}
+
+	if br.Debug {
+		os.Stderr.WriteString("-------------------------------------------------\n\n")
+	}
+
+	// 2. the repo's manifest against the staged files, which also catches the
+	// staged manifest having drifted from the committed one
+	if br.Debug {
+		os.Stderr.WriteString("checking the staged files against " + br.Pkg.ManifestFile() + "\n")
+		os.Stderr.WriteString("-------------------------------------------------\n")
+	}
+
+	stagedSums := make(map[string]string, len(stagedManifest))
+	for _, e := range stagedManifest {
+		stagedSums[e.Path] = e.Sum
+	}
+
+	for _, e := range repoManifest {
+		if sum, ok := stagedSums[e.Path]; !ok {
+			problems = append(problems, fmt.Sprintf("%s: registered but missing from the staged md5sums", e.Path))
+		} else if sum != e.Sum {
+			problems = append(problems, fmt.Sprintf("%s: staged md5sums says %s, manifest says %s", e.Path, sum, e.Sum))
+		}
+
+		path := filepath.Join(br.Tmp, e.Path)
+
+		if !file.Exists(path) {
+			if br.Debug {
+				fmt.Fprintf(os.Stderr, "  MISSING   %s  %s\n", e.Sum, e.Path)
+			}
+			problems = append(problems, fmt.Sprintf("%s: registered but not staged", e.Path))
+			continue
+		}
+
+		sum, err := Sum(path)
+		if err != nil {
+			if br.Debug {
+				fmt.Fprintf(os.Stderr, "  ERROR     %s  %s (%s)\n", e.Sum, e.Path, err)
+			}
+			problems = append(problems, fmt.Sprintf("%s: %s", e.Path, err))
+			continue
+		}
+
+		if sum != e.Sum {
+			if br.Debug {
+				fmt.Fprintf(os.Stderr, "  MISMATCH  %s  %s (got %s)\n", e.Sum, e.Path, sum)
+			}
+			problems = append(problems, fmt.Sprintf("%s: staged file does not match the manifest (want %s, got %s)", e.Path, e.Sum, sum))
+			continue
+		}
+
+		if br.Debug {
+			fmt.Fprintf(os.Stderr, "  ok        %s  %s\n", sum, e.Path)
+		}
+	}
+
+	if br.Debug {
+		os.Stderr.WriteString("-------------------------------------------------\n\n")
+	}
+
+	// anything staged outside the control dir that nothing registered
+	err = filepath.Walk(br.Tmp, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		rel, err := filepath.Rel(br.Tmp, path)
+		if err != nil {
+			return err
+		}
+
+		if info.IsDir() {
+			// the control dir is staged separately and is not package content
+			if rel == "DEBIAN" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		if !info.Mode().IsRegular() {
+			return nil
+		}
+
+		if _, ok := stagedSums[rel]; ok {
+			return nil
+		}
+
+		if br.Debug {
+			fmt.Fprintf(os.Stderr, "  UNKNOWN   %s (staged but not in the staged md5sums)\n", rel)
+		}
+		problems = append(problems, fmt.Sprintf("%s: staged but not in the staged md5sums", rel))
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("failed to walk the staged tree: %s", err)
+	}
+
+	sort.Strings(problems)
+	for _, p := range problems {
+		os.Stderr.WriteString("WARNING: " + p + "\n")
+	}
+
+	if len(problems) > 0 && !br.Insecure {
+		return fmt.Errorf("the staged tree does not match the manifest for %d file(s)", len(problems))
+	}
+
+	if br.Debug {
+		fmt.Fprintf(os.Stderr, "verified %d staged file(s), %d problem(s)\n", len(stagedManifest), len(problems))
+	}
+
+	return nil
 }
 
 // StageFiles is a packaging step that stages the package files to a
@@ -433,11 +699,10 @@ var StageFiles = func(br *BuildRequest) error {
 		os.Stderr.WriteString("-------------------------------------------------\n\n")
 	}
 
-	if br.PrintMD5Sums || br.Debug {
-		os.Stderr.WriteString("\nMD5SUMS\n")
-		os.Stderr.WriteString("-------------------------------------------------\n")
+	// the sums that will be shipped, printed by default so a build leaves a
+	// record of what went into the package
+	if !br.Quiet {
 		m.Write(os.Stderr)
-		os.Stderr.WriteString("-------------------------------------------------\n\n")
 	}
 
 	return nil
