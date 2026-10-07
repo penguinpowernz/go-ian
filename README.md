@@ -10,17 +10,45 @@ It has been ported to golang from the [ruby project of the same name](https://gi
 
 You can download binaries and Debian packages from the [releases](https://github.com/penguinpowernz/go-ian/releases) page.
 
+## Upgrading to v4.0.0
+
+**v4.0.0 is a significant change and existing packages will not build until they are migrated.**
+
+What goes into a package is now decided by the `DEBIAN/md5sums` manifest, rather than by sweeping the whole
+repo and filtering it through `.ianignore`. This makes the file list explicit and auditable: the sums of
+files that aren't themselves committed (built binaries, for instance) are recorded in the repo, so a released
+`.deb` can be checked against the source it was built from.
+
+What changed:
+
+* only files registered with `ian add` are included in the package
+* `.ianignore` is no longer used, and the `ian excludes` command is gone
+* `ian files`, `ian sums` and `ian size` are gone — `ian pkg -n` prints the file list without building
+* bare files in the repo root are no longer swept into `/usr/share/doc` automatically — they are registered
+  explicitly with `ian doc`, which records them in `DEBIAN/docfiles`
+* `ian pkg` fails if a registered file no longer matches its recorded sum (pass `-k` to downgrade to a warning)
+
+To migrate an existing package, run this in the package directory:
+
+    ian migrate      # shows what it would register, writes nothing
+    ian migrate -f   # applies it, and deletes the now-unused .ianignore
+
+It derives the file list using the old rules — your `.ianignore` patterns plus ian's built-in defaults — so the
+result should match what the previous version packaged, with bare root files becoming doc files. Review the
+output, then commit `DEBIAN/md5sums` and `DEBIAN/docfiles`. `ian status` will show you which registered files
+have since drifted.
+
 ## Requirements
 
 I shell out a bit to save time, will eventually make things more native.  For now, need the following tools:
 
 * dpkg-deb
 * fakeroot
-* rsync
+* du
 
 This should do it.
 
-    sudo apt-get install fakeroot dpkg-dev rsync coreutils findutils
+    sudo apt-get install fakeroot dpkg-dev coreutils findutils
 
 ## Installation
 
@@ -59,24 +87,29 @@ The architecture and the version can be set quickly in this manner.  Other field
     ian set -a amd64
     ian set -v 1.2.3-test
 
+### Registering files for the package
+
+    ian add usr/bin/myapp etc/myapp/config.yml
+
+`ian` decides what goes into the package using the `DEBIAN/md5sums` manifest: **only files listed there are
+included**, so the Debian packaging metadata can live happily alongside your source without dragging unwanted
+files into the package.  `ian add` computes the MD5 sum of each given file and records it in `DEBIAN/md5sums`
+(standard Debian format, paths relative to the package root).  Re-running `ian add` on a file updates its sum.
+
 ### Packaging
 
     ian pkg
 
-The one you came here for.  Packages the repo in a debian package, excluding junk files like `.git` and `.gitignore`,
-moves root files (like `README.md`) to a `/usr/share/doc` folder so you don't dirty your root partition on install.
-The package will be output to a `pkg` directory in the root of the repo.  It will also generate the md5sums file
-and calculate the package size proir to packaging.
+The one you came here for.  Stages the files listed in `DEBIAN/md5sums` into a debian package, copies the
+`DEBIAN/md5sums` manifest in verbatim (so `debsums` works normally) and calculates the package size prior to
+packaging.  The package will be output to a `pkg` directory in the root of the repo.
+
+Before staging, every file's MD5 sum is verified against the manifest.  If any file is missing or its sum no
+longer matches, the build **fails** — protecting you from shipping a file that changed since it was registered.
+Pass `-k` / `--insecure` to downgrade these failures to warnings and build anyway.
 
 By default the file list is printed before building. Use `-q` to suppress it, or `-n` for a dry run that prints
 the files without building.
-
-### Listing package files
-
-    ian files
-
-Lists the files that would be included in the package, using the same exclude rules as the build.  Equivalent to
-`ian pkg -n` but without building.
 
 ### Push
 
@@ -102,9 +135,13 @@ Use `-h` to get help on commands and their available flags.
 Some other commands:
 
     ian -d dpkg pkg # uses the folder called `dpkg` as the package root
-    ian excludes    # shows the excluded files
-    ian files       # lists files that would be included in the package
-    ian size        # calculates the package size (in kB)
+    ian add <file>  # registers a file (and its md5sum) for inclusion
+    ian rm <file>   # unregisters a file, leaving it on disk
+    ian doc         # lists doc files and where they install to
+    ian doc <file>  # registers a file to install into /usr/share/doc
+    ian status      # shows which registered files have changed or gone missing
+    ian migrate     # migrates a pre-v4.0.0 package to the manifest format
+    ian pkg -n      # lists the files that would be included, without building
     ian -v          # prints the ian version
     ian deps        # prints the dependencies line by line
 
@@ -158,7 +195,7 @@ package for ian, using ian.  Give it a try!
 * [ ] support copyright file
 * [ ] support changelog
 * [x] don't shell out for md5sums
-* [ ] don't shell out for rsync
+* [x] don't shell out for rsync
 * [x] don't shell out for find
 * [ ] don't shell out for dpkg-deb
 * [x] pull maintainer from git config
