@@ -1,4 +1,36 @@
 #!/bin/bash
 
+# On an upgrade dpkg passes the previously installed version as $2, so the
+# notice below is only shown to people coming from before the manifest format.
+if [ "$1" = "configure" ] && [ -n "$2" ]; then
+    if dpkg --compare-versions "$2" lt "4.0.0"; then
+        echo ""
+        echo "============================================================================="
+        echo " ian 4.0.0 is a significant change from the version you were running ($2)."
+        # quoted heredoc: the body is printed literally, no expansion
+        cat <<'EOF'
+
+ What goes into a package is now decided by DEBIAN/md5sums, not by sweeping
+ the repo and applying .ianignore:
+
+   * only files registered with "ian add" are packaged
+   * .ianignore is no longer used
+   * bare files in the repo root are no longer swept into usr/share/doc,
+     they are registered explicitly with "ian doc"
+   * "ian pkg" fails if a registered file no longer matches its md5 sum
+   * the "ian excludes" command is gone
+
+ Existing packages will not build until they are migrated. In each package:
+
+   ian migrate      # shows what it would register, writes nothing
+   ian migrate -f   # applies it, and deletes .ianignore
+
+ Then review and commit DEBIAN/md5sums and DEBIAN/docfiles.
+ "ian status" shows which registered files have drifted.
+=============================================================================
+
+EOF
+    fi
+fi
 
 exit 0;
