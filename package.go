@@ -51,9 +51,14 @@ func (p *Pkg) Size() (string, error) {
 		return "", err
 	}
 
+	docSrcs, err := p.DocSources()
+	if err != nil {
+		return "", err
+	}
+
 	var size int64
 	for _, e := range m {
-		fi, err := os.Stat(p.Dir(e.Path))
+		fi, err := os.Stat(p.Dir(p.SourceFor(e.Path, docSrcs)))
 		if err != nil {
 			return "", err
 		}

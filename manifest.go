@@ -127,23 +127,40 @@ const (
 
 // FileStatus is the result of checking one manifest entry against the repo
 type FileStatus struct {
-	Path  string
-	State FileState
-	Want  string // the sum recorded in the manifest
-	Got   string // the sum computed from the repo, empty when unavailable
-	Err   error  // set when State is StateError
+	Path   string // the path the file takes inside the package
+	Source string // the repo file it is staged from, differs for doc files
+	State  FileState
+	Want   string // the sum recorded in the manifest
+	Got    string // the sum computed from the repo, empty when unavailable
+	Err    error  // set when State is StateError
+}
+
+// IsDoc reports whether this entry is staged from a different path than it
+// takes in the package, which is what makes it a doc file
+func (s FileStatus) IsDoc() bool {
+	return s.Source != "" && s.Source != s.Path
 }
 
 // Problem renders the status as a human readable problem description, or
 // returns an empty string when the file is OK.
 func (s FileStatus) Problem() string {
+	// report the repo file, since that is the one to go and look at, noting the
+	// package path too when the two differ
+	what := s.Source
+	if what == "" {
+		what = s.Path
+	}
+	if s.IsDoc() {
+		what = fmt.Sprintf("%s (installs as %s)", s.Source, s.Path)
+	}
+
 	switch s.State {
 	case StateMissing:
-		return fmt.Sprintf("%s: missing from repo", s.Path)
+		return fmt.Sprintf("%s: missing from repo", what)
 	case StateError:
-		return fmt.Sprintf("%s: %s", s.Path, s.Err)
+		return fmt.Sprintf("%s: %s", what, s.Err)
 	case StateModified:
-		return fmt.Sprintf("%s: md5 mismatch (want %s, got %s)", s.Path, s.Want, s.Got)
+		return fmt.Sprintf("%s: md5 mismatch (want %s, got %s)", what, s.Want, s.Got)
 	}
 	return ""
 }
@@ -157,10 +174,18 @@ func (p *Pkg) Status() ([]FileStatus, error) {
 		return nil, err
 	}
 
+	// doc files are staged from somewhere other than their path in the package,
+	// so their sums must be checked against the source file in the repo
+	docSrcs, err := p.DocSources()
+	if err != nil {
+		return nil, err
+	}
+
 	statuses := make([]FileStatus, 0, len(m))
 	for _, e := range m {
-		st := FileStatus{Path: e.Path, Want: e.Sum}
-		path := p.Dir(e.Path)
+		src := p.SourceFor(e.Path, docSrcs)
+		st := FileStatus{Path: e.Path, Source: src, Want: e.Sum}
+		path := p.Dir(src)
 
 		switch {
 		case !file.Exists(path):
@@ -269,7 +294,9 @@ func (p *Pkg) ExpandFiles(paths []string) ([]string, error) {
 			}
 
 			if info.IsDir() {
-				if skipDir(r) {
+				// the doc dir holds files placed there by `ian doc`, which are
+				// registered at their destination rather than walked
+				if skipDir(r) || r == p.DocDir() {
 					return filepath.SkipDir
 				}
 				return nil
@@ -358,6 +385,13 @@ func (p *Pkg) AddFile(relpath string) error {
 		return err
 	}
 
+	return p.addEntry(relpath, sum)
+}
+
+// addEntry upserts a single path and sum into the manifest and writes it back.
+// The path is the one the file takes inside the package, which for doc files
+// differs from the repo path they are copied from.
+func (p *Pkg) addEntry(path, sum string) error {
 	m, err := p.Manifest()
 	if err != nil {
 		return err
@@ -365,14 +399,14 @@ func (p *Pkg) AddFile(relpath string) error {
 
 	found := false
 	for i, e := range m {
-		if e.Path == relpath {
+		if e.Path == path {
 			m[i].Sum = sum
 			found = true
 			break
 		}
 	}
 	if !found {
-		m = append(m, ManifestEntry{Sum: sum, Path: relpath})
+		m = append(m, ManifestEntry{Sum: sum, Path: path})
 	}
 
 	return p.WriteManifest(m)

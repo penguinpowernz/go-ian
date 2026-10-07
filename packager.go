@@ -234,8 +234,15 @@ var StageFiles = func(br *BuildRequest) error {
 		return fmt.Errorf("failed to read manifest: %s", err)
 	}
 
+	// doc files are copied from their place in the repo to the package's doc
+	// dir, so their manifest path is not where the source file lives
+	docSrcs, err := br.Pkg.DocSources()
+	if err != nil {
+		return fmt.Errorf("failed to read doc files: %s", err)
+	}
+
 	for _, e := range m {
-		src := br.Pkg.Dir(e.Path)
+		src := br.Pkg.Dir(br.Pkg.SourceFor(e.Path, docSrcs))
 		if !file.Exists(src) {
 			// already warned about by VerifyManifest in insecure mode; skip
 			continue

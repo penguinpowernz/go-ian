@@ -48,10 +48,26 @@ func Initialize(dir string) error {
 	if err := file.EmptyDotFile(pkg.ManifestFile()); err != nil {
 		return err
 	}
+
+	if err := os.WriteFile(pkg.DocFilesFile(), []byte(defaultDocFiles), 0644); err != nil {
+		return err
+	}
+
 	file.EmptyDotFile(pkg.Dir(".ianpush"))
 
 	return nil
 }
+
+// defaultDocFiles is written to DEBIAN/docfiles on ian init.  Lines starting
+// with '#' are comments, so the header explains the file without listing
+// anything.
+const defaultDocFiles = `# Files listed here are installed into usr/share/doc/<package> under their base
+# name, rather than at their own path in the repo.  One path per line, relative
+# to the package directory.  Lines starting with '#' are comments.
+#
+# Use ` + "`ian doc <file>`" + ` to add a file here, which also records its
+# destination and md5 sum in DEBIAN/md5sums.
+`
 
 func FindMaintainer() (string, bool) {
 	gcpath := filepath.Join(os.Getenv("HOME"), ".gitconfig")

@@ -121,16 +121,22 @@ included in the package and so are not shown here.`,
 
 			w := tabwriter.NewWriter(os.Stdout, 0, 8, 2, ' ', 0)
 			for _, st := range in {
+				// name the repo file, noting where a doc file installs to
+				shown := st.Path
+				if st.IsDoc() {
+					shown = fmt.Sprintf("%s -> %s", st.Source, st.Path)
+				}
+
 				switch {
 				case !verbose:
-					fmt.Fprintf(w, "\t%s\t%s\n", statusLabel(st.State), st.Path)
+					fmt.Fprintf(w, "\t%s\t%s\n", statusLabel(st.State), shown)
 				case st.State == ian.StateModified:
 					// show what was recorded and what is actually there now
-					fmt.Fprintf(w, "\t%s\t%s\t%s\tnow %s\n", statusLabel(st.State), st.Path, st.Want, st.Got)
+					fmt.Fprintf(w, "\t%s\t%s\t%s\tnow %s\n", statusLabel(st.State), shown, st.Want, st.Got)
 				case st.State == ian.StateError:
-					fmt.Fprintf(w, "\t%s\t%s\t%s\t%s\n", statusLabel(st.State), st.Path, st.Want, st.Err)
+					fmt.Fprintf(w, "\t%s\t%s\t%s\t%s\n", statusLabel(st.State), shown, st.Want, st.Err)
 				default:
-					fmt.Fprintf(w, "\t%s\t%s\t%s\n", statusLabel(st.State), st.Path, st.Want)
+					fmt.Fprintf(w, "\t%s\t%s\t%s\n", statusLabel(st.State), shown, st.Want)
 				}
 			}
 			w.Flush()
