@@ -5,20 +5,12 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"github.com/penguinpowernz/go-ian/util/colour"
 )
 
 // debugWidth is the width of the rules drawn around a debug section
 const debugWidth = 72
-
-// the SGR escapes used for the headings.  Status words are left uncoloured
-// so that the file listings stay greppable and quiet.
-const (
-	ansiReset = "\033[0m"
-	ansiStep  = "\033[1;36m" // bold cyan, for the step heading
-	ansiRule  = "\033[2;37m" // dim grey, for the rules
-	ansiSect  = "\033[1m"    // bold, for a section title
-	ansiSum   = "\033[2m"    // dim, for the step summary
-)
 
 // debug is the debug output printer for a build.  All of the packaging steps
 // report through it so that a debug build reads as one consistent document:
@@ -28,9 +20,9 @@ type debug struct {
 	w  io.Writer
 	on bool
 
-	// colour is set when the output is a terminal, so that a redirected or
-	// piped debug log stays free of escape sequences
-	colour bool
+	// c paints the headings, and is off when the output is not a terminal so
+	// that a redirected or piped debug log carries no escape sequences
+	c colour.Painter
 
 	// open is the section currently being written to, if any
 	open bool
@@ -38,33 +30,13 @@ type debug struct {
 
 // newDebug returns a debug printer writing to stderr
 func newDebug(on bool) *debug {
-	return &debug{w: os.Stderr, on: on, colour: isTerminal(os.Stderr)}
-}
-
-// isTerminal reports whether the file is a character device, which is the
-// closest the standard library gets to a TTY check.  NO_COLOR is honoured
-// so the headings can be turned plain without turning off debug output.
-func isTerminal(f *os.File) bool {
-	if _, set := os.LookupEnv("NO_COLOR"); set {
-		return false
-	}
-
-	fi, err := f.Stat()
-	if err != nil {
-		return false
-	}
-
-	return fi.Mode()&os.ModeCharDevice != 0
+	return &debug{w: os.Stderr, on: on, c: colour.For(os.Stderr)}
 }
 
 // paint wraps s in an SGR escape, or returns it unchanged when the output
 // is not a terminal
 func (d *debug) paint(code, s string) string {
-	if !d.colour {
-		return s
-	}
-
-	return code + s + ansiReset
+	return d.c.P(code, s)
 }
 
 // Step announces a packaging step, which is the top level of the output
@@ -75,8 +47,8 @@ func (d *debug) Step(name string) {
 
 	d.EndSection()
 	fmt.Fprintf(d.w, "\n%s\n%s\n",
-		d.paint(ansiStep, strings.ToUpper(name)),
-		d.paint(ansiRule, strings.Repeat("=", debugWidth)))
+		d.paint(colour.Cyan, strings.ToUpper(name)),
+		d.paint(colour.Grey, strings.Repeat("=", debugWidth)))
 }
 
 // Section begins a titled block of lines within the current step.  Lines
@@ -88,8 +60,8 @@ func (d *debug) Section(format string, args ...interface{}) {
 
 	d.EndSection()
 	fmt.Fprintf(d.w, "\n%s\n%s\n",
-		d.paint(ansiSect, fmt.Sprintf(format, args...)),
-		d.paint(ansiRule, strings.Repeat("-", debugWidth)))
+		d.paint(colour.Bold, fmt.Sprintf(format, args...)),
+		d.paint(colour.Grey, strings.Repeat("-", debugWidth)))
 	d.open = true
 }
 
@@ -99,7 +71,7 @@ func (d *debug) EndSection() {
 		return
 	}
 
-	fmt.Fprintf(d.w, "%s\n", d.paint(ansiRule, strings.Repeat("-", debugWidth)))
+	fmt.Fprintf(d.w, "%s\n", d.paint(colour.Grey, strings.Repeat("-", debugWidth)))
 	d.open = false
 }
 
@@ -138,9 +110,7 @@ func (d *debug) File(status, sum, path, detail string, args ...interface{}) {
 		return
 	}
 
-	// pad before painting: the escape bytes would otherwise be counted in
-	// the field width and throw the columns out
-	word := d.paint(statusColour(status), fmt.Sprintf("%-9s", status))
+	word := d.c.Pad(statusColour(status), status, 9)
 
 	// a line with no sum to show (a staged file, an unregistered one) closes
 	// the gap rather than leaving an empty column
@@ -161,11 +131,11 @@ func (d *debug) File(status, sum, path, detail string, args ...interface{}) {
 func statusColour(status string) string {
 	switch status {
 	case "ok", "staged", "control":
-		return "\033[32m"
+		return colour.Green
 	case "UNKNOWN", "ABSENT", "SKIPPED":
-		return "\033[33m"
+		return colour.Yellow
 	default:
-		return "\033[1;31m"
+		return colour.Red
 	}
 }
 
@@ -176,5 +146,5 @@ func (d *debug) Summary(format string, args ...interface{}) {
 	}
 
 	d.EndSection()
-	fmt.Fprintf(d.w, "\n%s\n", d.paint(ansiSum, "=> "+fmt.Sprintf(format, args...)))
+	fmt.Fprintf(d.w, "\n%s\n", d.paint(colour.Dim, "=> "+fmt.Sprintf(format, args...)))
 }

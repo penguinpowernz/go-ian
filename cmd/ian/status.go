@@ -6,6 +6,7 @@ import (
 	"text/tabwriter"
 
 	ian "github.com/penguinpowernz/go-ian"
+	"github.com/penguinpowernz/go-ian/util/colour"
 	"github.com/penguinpowernz/go-ian/util/tell"
 	"github.com/spf13/cobra"
 )
@@ -29,6 +30,27 @@ func statusLabel(s ian.FileState) string {
 	return "ok"
 }
 
+// statusColour returns the escape for a state: green for a file that still
+// matches the manifest, yellow for one that has drifted, red for one that is
+// gone or unreadable
+func statusColour(s ian.FileState) string {
+	switch s {
+	case ian.StateModified:
+		return colour.Yellow
+	case ian.StateMissing, ian.StateError:
+		return colour.Red
+	}
+	return colour.Green
+}
+
+// labelWidth is the width of the status column, wide enough for the longest
+// label so the paths line up down the listing.  sumWidth is the width of an
+// md5 sum, for the column it occupies under -v.
+const (
+	labelWidth = 8
+	sumWidth   = 32
+)
+
 var statusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "List registered files and whether they have changed",
@@ -46,6 +68,8 @@ included in the package and so are not shown here.`,
 
 		verbose, _ := cmd.Flags().GetBool("verbose")
 		quiet, _ := cmd.Flags().GetBool("quiet")
+
+		c := colour.For(os.Stdout)
 
 		statuses, err := PKG.Status()
 		tell.IfFatalf(err, "failed to read manifest")
@@ -65,8 +89,8 @@ included in the package and so are not shown here.`,
 		}
 
 		if len(statuses) == 0 {
-			fmt.Println("No files registered for packaging.")
-			fmt.Println("  (use \"ian add <file>...\" to register files to include in the package)")
+			fmt.Println(c.P(colour.Bold, "No files registered for packaging."))
+			fmt.Println("  " + c.P(colour.Dim, `(use "ian add <file>..." to register files to include in the package)`))
 			return
 		}
 
@@ -113,9 +137,9 @@ included in the package and so are not shown here.`,
 				continue
 			}
 
-			fmt.Println(g.title)
+			fmt.Println(c.P(colour.Bold, g.title))
 			for _, h := range g.hints {
-				fmt.Println("  " + h)
+				fmt.Println("  " + c.P(colour.Dim, h))
 			}
 			fmt.Println()
 
@@ -127,16 +151,22 @@ included in the package and so are not shown here.`,
 					shown = fmt.Sprintf("%s -> %s", st.Source, st.Path)
 				}
 
+				// pad the label before painting it: tabwriter measures cells
+				// by their bytes and would count the escapes as width
+				label := c.Pad(statusColour(st.State), statusLabel(st.State), labelWidth)
+
 				switch {
 				case !verbose:
-					fmt.Fprintf(w, "\t%s\t%s\n", statusLabel(st.State), shown)
+					fmt.Fprintf(w, "\t%s\t%s\n", label, shown)
 				case st.State == ian.StateModified:
 					// show what was recorded and what is actually there now
-					fmt.Fprintf(w, "\t%s\t%s\t%s\tnow %s\n", statusLabel(st.State), shown, st.Want, st.Got)
+					fmt.Fprintf(w, "\t%s\t%s\t%s\t%s\n", label, shown,
+						c.Pad(colour.Dim, st.Want, sumWidth), c.P(colour.Yellow, "now "+st.Got))
 				case st.State == ian.StateError:
-					fmt.Fprintf(w, "\t%s\t%s\t%s\t%s\n", statusLabel(st.State), shown, st.Want, st.Err)
+					fmt.Fprintf(w, "\t%s\t%s\t%s\t%s\n", label, shown,
+						c.Pad(colour.Dim, st.Want, sumWidth), c.P(colour.Red, fmt.Sprint(st.Err)))
 				default:
-					fmt.Fprintf(w, "\t%s\t%s\t%s\n", statusLabel(st.State), shown, st.Want)
+					fmt.Fprintf(w, "\t%s\t%s\t%s\n", label, shown, c.P(colour.Dim, st.Want))
 				}
 			}
 			w.Flush()
@@ -144,13 +174,13 @@ included in the package and so are not shown here.`,
 		}
 
 		if drifted == 0 {
-			fmt.Printf("%d file(s) registered, all match the manifest.\n", len(statuses))
-			fmt.Println("  (use \"ian add <file>...\" to register more, \"ian pkg\" to build)")
+			fmt.Println(c.P(colour.Green, fmt.Sprintf("%d file(s) registered, all match the manifest.", len(statuses))))
+			fmt.Println("  " + c.P(colour.Dim, `(use "ian add <file>..." to register more, "ian pkg" to build)`))
 			return
 		}
 
-		fmt.Printf("%d of %d registered file(s) have drifted.\n", drifted, len(statuses))
-		fmt.Println("  (\"ian pkg\" will refuse to build until this is resolved, or pass -k to build anyway)")
+		fmt.Println(c.P(colour.Red, fmt.Sprintf("%d of %d registered file(s) have drifted.", drifted, len(statuses))))
+		fmt.Println("  " + c.P(colour.Dim, `("ian pkg" will refuse to build until this is resolved, or pass -k to build anyway)`))
 		os.Exit(1)
 	},
 }
