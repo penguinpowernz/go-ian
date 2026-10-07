@@ -1,6 +1,9 @@
 package ian
 
 import (
+	"io/ioutil"
+	"os"
+	"path/filepath"
 	"testing"
 
 	. "github.com/smartystreets/goconvey/convey"
@@ -144,6 +147,123 @@ func TestPushMakeCmd(t *testing.T) {
 					So(cmd.Args[0], ShouldEqual, "/bin/true")
 				})
 			})
+		})
+	})
+}
+
+func TestParseTargetsEdgeCases(t *testing.T) {
+	Convey("given a push file", t, func() {
+		pkg := "pkg/test.deb"
+
+		Convey("an empty one yields no targets", func() {
+			So(parseTargets([]byte(""), pkg), ShouldBeEmpty)
+			So(parseTargets([]byte("   \n\n  \n"), pkg), ShouldBeEmpty)
+		})
+
+		Convey("blank lines between commands are skipped", func() {
+			tgts := parseTargets([]byte("true one\n\n\ntrue two\n"), pkg)
+			So(len(tgts), ShouldEqual, 2)
+		})
+
+		// a line naming a binary that is not installed cannot be run, so it
+		// is reported and skipped rather than aborting the whole push
+		Convey("a line naming a missing binary is skipped", func() {
+			tgts := parseTargets([]byte("definitely-not-a-real-binary-xyzzy go\ntrue ok\n"), pkg)
+			So(len(tgts), ShouldEqual, 1)
+			So(tgts[0].cmd.Args, ShouldContain, "ok")
+		})
+
+		Convey("a named line naming a missing binary is skipped too", func() {
+			tgts := parseTargets([]byte("stable: definitely-not-a-real-binary-xyzzy go\n"), pkg)
+			So(tgts, ShouldBeEmpty)
+		})
+	})
+}
+
+func TestMakeCmdMissingBinary(t *testing.T) {
+	Convey("given a command naming a binary that is not installed", t, func() {
+		_, err := makeCmd("definitely-not-a-real-binary-xyzzy go", "pkg/test.deb")
+
+		Convey("it errors, naming the binary", func() {
+			So(err, ShouldNotBeNil)
+			So(err.Error(), ShouldContainSubstring, "definitely-not-a-real-binary-xyzzy")
+		})
+	})
+}
+
+func TestPush(t *testing.T) {
+	Convey("given a package file and a push file", t, func() {
+		dir, err := ioutil.TempDir("/tmp", "go-ian-push")
+		So(err, ShouldBeNil)
+		defer os.RemoveAll(dir)
+
+		deb := filepath.Join(dir, "test.deb")
+		writeFile(t, deb, "not really a deb\n")
+
+		pushFile := filepath.Join(dir, ".ianpush")
+
+		Convey("a push whose command succeeds reports success", func() {
+			writeFile(t, pushFile, "true\n")
+			So(Push(pushFile, deb, ""), ShouldBeNil)
+		})
+
+		Convey("a push whose command fails errors", func() {
+			writeFile(t, pushFile, "false\n")
+			err := Push(pushFile, deb, "")
+			So(err, ShouldNotBeNil)
+			So(err.Error(), ShouldContainSubstring, "failed to execute")
+		})
+
+		// one failing target must not be reported as a clean push
+		Convey("a push where only some targets succeed errors", func() {
+			writeFile(t, pushFile, "true\nfalse\n")
+			So(Push(pushFile, deb, ""), ShouldNotBeNil)
+		})
+
+		Convey("named targets are selected by name", func() {
+			writeFile(t, pushFile, "stable: true\ntest: false\n")
+
+			So(Push(pushFile, deb, "stable"), ShouldBeNil)
+			So(Push(pushFile, deb, "test"), ShouldNotBeNil)
+		})
+
+		Convey("a glob selects several targets", func() {
+			writeFile(t, pushFile, "stable: true\nstaging: true\ntest: false\n")
+			So(Push(pushFile, deb, "sta*"), ShouldBeNil)
+		})
+
+		// an empty selector means the unnamed lines, so `ian push` with no
+		// argument pushes what the push file lists plainly
+		Convey("no selector means the default targets", func() {
+			writeFile(t, pushFile, "true\nstable: false\n")
+			So(Push(pushFile, deb, ""), ShouldBeNil)
+		})
+
+		Convey("a selector matching nothing errors", func() {
+			writeFile(t, pushFile, "stable: true\n")
+			err := Push(pushFile, deb, "nope")
+			So(err, ShouldNotBeNil)
+			So(err.Error(), ShouldContainSubstring, "no targets")
+		})
+
+		Convey("an empty push file errors rather than claiming success", func() {
+			writeFile(t, pushFile, "\n")
+			So(Push(pushFile, deb, ""), ShouldNotBeNil)
+		})
+
+		Convey("a missing push file errors", func() {
+			err := Push(filepath.Join(dir, "nope"), deb, "")
+			So(err, ShouldNotBeNil)
+			So(err.Error(), ShouldContainSubstring, "couldn't read push file")
+		})
+
+		// pushing a package that was never built is a mistake worth catching
+		// before any command runs
+		Convey("a missing package errors", func() {
+			writeFile(t, pushFile, "true\n")
+			err := Push(pushFile, filepath.Join(dir, "nope.deb"), "")
+			So(err, ShouldNotBeNil)
+			So(err.Error(), ShouldContainSubstring, "couldn't find package")
 		})
 	})
 }

@@ -3,9 +3,11 @@ package deb
 import (
 	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -392,4 +394,261 @@ func tarWith(t *testing.T, name string) io.Reader {
 	}
 
 	return &buf
+}
+
+// TestExtractMissingMember checks a .deb that does not hold the member being
+// asked for is reported as such, rather than silently extracting nothing
+func TestExtractMissingMember(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "odd.deb")
+
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = writeAr(f, []arMember{{Name: "debian-binary", Body: []byte("2.0\n")}})
+	f.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, fn := range []func(string, string) error{ExtractControl, ExtractData} {
+		if err := fn(path, t.TempDir()); err == nil {
+			t.Error("extracting a member that isn't there returned no error")
+		}
+	}
+}
+
+func TestExtractMissingFile(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "nope.deb")
+
+	if err := ExtractData(missing, t.TempDir()); err == nil {
+		t.Error("extracting a file that isn't there returned no error")
+	}
+	if err := ExtractControl(missing, t.TempDir()); err == nil {
+		t.Error("extracting a file that isn't there returned no error")
+	}
+}
+
+func TestExtractNotADeb(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "notadeb")
+	write(t, path, "this is not an ar archive at all", 0644)
+
+	if err := ExtractData(path, t.TempDir()); err == nil {
+		t.Error("extracting a file that isn't a .deb returned no error")
+	}
+}
+
+func TestDecompress(t *testing.T) {
+	var gz bytes.Buffer
+	zw := gzip.NewWriter(&gz)
+	if _, err := zw.Write([]byte("payload")); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("gzip", func(t *testing.T) {
+		r, err := decompress(arMember{Name: "data.tar.gz", Body: gz.Bytes()})
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, err := io.ReadAll(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(body) != "payload" {
+			t.Errorf("decompressed to %q", body)
+		}
+	})
+
+	t.Run("uncompressed", func(t *testing.T) {
+		r, err := decompress(arMember{Name: "data.tar", Body: []byte("payload")})
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, err := io.ReadAll(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(body) != "payload" {
+			t.Errorf("read back as %q", body)
+		}
+	})
+
+	// xz, zstd and bzip2 are legal in a .deb but need a dependency to read,
+	// so say so rather than failing obscurely further down
+	t.Run("unsupported compression is named", func(t *testing.T) {
+		_, err := decompress(arMember{Name: "data.tar.xz", Body: []byte("x")})
+		if err == nil {
+			t.Fatal("no error for an unsupported compression format")
+		}
+		if !strings.Contains(err.Error(), "data.tar.xz") {
+			t.Errorf("error does not name the member: %s", err)
+		}
+	})
+
+	t.Run("corrupt gzip errors", func(t *testing.T) {
+		if _, err := decompress(arMember{Name: "data.tar.gz", Body: []byte("not gzip")}); err == nil {
+			t.Error("no error for a corrupt gzip member")
+		}
+	})
+}
+
+// TestUntarEntryTypes checks what untar does with each entry type a .deb may
+// hold: directories and files are created, symlinks are recreated without
+// being followed, and device nodes are skipped rather than attempted
+func TestUntarEntryTypes(t *testing.T) {
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+
+	hdrs := []*tar.Header{
+		{Name: "./usr/", Typeflag: tar.TypeDir, Mode: 0755},
+		{Name: "./usr/bin/app", Typeflag: tar.TypeReg, Mode: 0755, Size: 4},
+		{Name: "./usr/bin/link", Typeflag: tar.TypeSymlink, Mode: 0777, Linkname: "app"},
+		{Name: "./dev/null", Typeflag: tar.TypeChar, Mode: 0666, Devmajor: 1, Devminor: 3},
+		{Name: "./run/fifo", Typeflag: tar.TypeFifo, Mode: 0666},
+	}
+
+	for _, h := range hdrs {
+		h.Format = tar.FormatGNU
+		if err := tw.WriteHeader(h); err != nil {
+			t.Fatal(err)
+		}
+		if h.Typeflag == tar.TypeReg {
+			if _, err := tw.Write([]byte("hi!\n")); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	dir := t.TempDir()
+	if err := untar(&buf, dir); err != nil {
+		t.Fatalf("untar: %s", err)
+	}
+
+	if fi, err := os.Stat(filepath.Join(dir, "usr")); err != nil || !fi.IsDir() {
+		t.Errorf("directory entry not extracted: %v %v", fi, err)
+	}
+
+	body, err := os.ReadFile(filepath.Join(dir, "usr", "bin", "app"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != "hi!\n" {
+		t.Errorf("file came back as %q", body)
+	}
+
+	// the link is recreated but never resolved, so its target need not exist
+	target, err := os.Readlink(filepath.Join(dir, "usr", "bin", "link"))
+	if err != nil {
+		t.Errorf("symlink not extracted: %s", err)
+	} else if target != "app" {
+		t.Errorf("symlink points at %q, want %q", target, "app")
+	}
+
+	// creating these needs privileges and ian never packages them
+	for _, skipped := range []string{"dev/null", "run/fifo"} {
+		if _, err := os.Lstat(filepath.Join(dir, skipped)); !os.IsNotExist(err) {
+			t.Errorf("%s was extracted", skipped)
+		}
+	}
+}
+
+// TestUntarRejectsTruncatedFile checks a stream whose header claims more bytes
+// than the body carries is reported rather than yielding a short file
+func TestUntarRejectsTruncatedFile(t *testing.T) {
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+
+	body := []byte("short")
+	err := tw.WriteHeader(&tar.Header{
+		Name:     "./usr/bin/app",
+		Typeflag: tar.TypeReg,
+		Mode:     0644,
+		Size:     int64(len(body)),
+		Format:   tar.FormatGNU,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tw.Write(body); err != nil {
+		t.Fatal(err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// lop off the body and its padding, leaving the header claiming 5 bytes
+	truncated := buf.Bytes()[:512]
+
+	if err := untar(bytes.NewReader(truncated), t.TempDir()); err == nil {
+		t.Error("a truncated archive extracted without an error")
+	}
+}
+
+func TestUntarEmptyAndRootEntriesAreSkipped(t *testing.T) {
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+
+	// a .deb's data tarball starts with an entry for its own root
+	for _, name := range []string{"./", "/"} {
+		err := tw.WriteHeader(&tar.Header{
+			Name:     name,
+			Typeflag: tar.TypeDir,
+			Mode:     0755,
+			Format:   tar.FormatGNU,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	dir := filepath.Join(t.TempDir(), "extract")
+	if err := untar(&buf, dir); err != nil {
+		t.Fatalf("untar: %s", err)
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("extracted %d entries, want none", len(entries))
+	}
+}
+
+func TestConfine(t *testing.T) {
+	root := "/tmp/root"
+
+	for _, rel := range []string{"usr/bin/app", "usr", "."} {
+		if _, err := confine(root, rel); err != nil {
+			t.Errorf("confine(%q) errored: %s", rel, err)
+		}
+	}
+
+	for _, rel := range []string{"../escaped", "usr/../../escaped", ".."} {
+		if _, err := confine(root, rel); err == nil {
+			t.Errorf("confine(%q) did not error", rel)
+		}
+	}
+
+	// a directory merely sharing the root's prefix is not inside it
+	if _, err := confine("/tmp/root", "../rootkit/x"); err == nil {
+		t.Error("confine let a sibling directory through")
+	}
+}
+
+func TestBuildMissingOutputDir(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "nope", "app_1.0_all.deb")
+
+	if err := Build(stage(t), out, BuildOpts{}); err == nil {
+		t.Error("building into a directory that isn't there returned no error")
+	}
 }

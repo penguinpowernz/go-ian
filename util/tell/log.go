@@ -32,7 +32,9 @@ func Debugf(msg string, args ...interface{}) {
 	}
 
 	msg = fmt.Sprintf(msg, args...)
-	log.Printf("DEBUG: " + msg)
+	// the message is already formatted, so Print rather than Printf: a value
+	// containing a % must not be taken as a format verb for a second pass
+	log.Print("DEBUG: " + msg)
 }
 
 // Infof logs a Infof message
@@ -42,7 +44,7 @@ func Infof(msg string, args ...interface{}) {
 	}
 
 	msg = fmt.Sprintf(msg, args...)
-	log.Printf("INFO: " + msg)
+	log.Print("INFO: " + msg)
 }
 
 // Warnf logs a Warnf message
@@ -52,7 +54,7 @@ func Warnf(msg string, args ...interface{}) {
 	}
 
 	msg = fmt.Sprintf(msg, args...)
-	log.Printf("WARN: " + msg)
+	log.Print("WARN: " + msg)
 }
 
 // IfErrorf logs an error message if there was an error
@@ -70,13 +72,13 @@ func Errorf(msg string, args ...interface{}) {
 	}
 
 	msg = fmt.Sprintf(msg, args...)
-	log.Printf("ERROR: " + msg)
+	log.Print("ERROR: " + msg)
 }
 
 // Fatalf logs a Fatalf message
 func Fatalf(msg string, args ...interface{}) {
 	msg = fmt.Sprintf(msg, args...)
-	log.Printf("FATAL: " + msg)
+	log.Print("FATAL: " + msg)
 	os.Exit(1)
 }
 
