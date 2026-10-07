@@ -58,7 +58,14 @@ func ReadManifest(path string) (Manifest, error) {
 			return nil, fmt.Errorf("malformed md5sums line %d: %q", i+1, line)
 		}
 
-		m = append(m, ManifestEntry{Sum: fields[0], Path: fields[1]})
+		// the manifest is committed to git and editable by hand, so the paths
+		// coming out of it get the same scrutiny as the ones going in
+		path, err := manifestPath(fields[1])
+		if err != nil {
+			return nil, fmt.Errorf("md5sums line %d: %s", i+1, err)
+		}
+
+		m = append(m, ManifestEntry{Sum: fields[0], Path: path})
 	}
 
 	return m, nil
@@ -236,19 +243,77 @@ func (p *Pkg) Verify(insecure bool) ([]string, error) {
 	return problems, nil
 }
 
-// manifestPath normalizes a user supplied path into the repo-relative form used
-// in the manifest, rejecting control files.  They are staged separately and are
-// not part of the package's file system, so they must never appear in the
-// manifest - and md5sums could never hold a stable sum of itself.
+// manifestPath normalizes a path into the repo-relative form used in the
+// manifest, rejecting anything that could not legitimately belong there.
+//
+// Control files are rejected because they are staged separately and are not
+// part of the package's file system, so they must never appear in the manifest
+// - and md5sums could never hold a stable sum of itself.
+//
+// Paths that escape the package directory are rejected because every path in
+// the manifest and the docfiles list is joined against both the repo root (to
+// read the file) and the staging root (to write it).  A path containing ".."
+// would read a file from outside the repo or write one outside the staging
+// dir, so a hand edited DEBIAN/md5sums could otherwise pull an arbitrary file
+// into the package or drop a file anywhere the build user can write.  This is
+// enforced on the way out of the control files as well as on the way in, since
+// they are committed to git and editable by hand.
 func manifestPath(relpath string) (string, error) {
+	orig := relpath
+
+	if filepath.IsAbs(relpath) {
+		return "", fmt.Errorf("%s: must be relative to the package directory", orig)
+	}
+
 	relpath = strings.TrimPrefix(relpath, "./")
-	relpath = strings.TrimPrefix(relpath, "/")
+
+	// Clean resolves any interior ".." and strips trailing slashes, so a
+	// leading ".." afterwards is the only way left to point outside the repo
+	relpath = filepath.Clean(relpath)
+
+	if relpath == ".." || strings.HasPrefix(relpath, "../") {
+		return "", fmt.Errorf("%s: outside of the package directory", orig)
+	}
+
+	if relpath == "." {
+		return "", fmt.Errorf("%s: not a file", orig)
+	}
 
 	if relpath == "DEBIAN" || strings.HasPrefix(relpath, "DEBIAN/") {
-		return "", fmt.Errorf("%s: control files cannot be registered in the manifest", relpath)
+		return "", fmt.Errorf("%s: control files cannot be registered in the manifest", orig)
 	}
 
 	return relpath, nil
+}
+
+// confine joins rel onto root and checks the result is still inside root.
+// ReadManifest and ReadDocFiles already reject escaping paths, so this is the
+// backstop for the filesystem calls themselves: staging reads and writes are
+// the point where a bad path would do damage, and they should not depend on
+// every caller having validated it first.
+func confine(root, rel string) (string, error) {
+	path := filepath.Join(root, rel)
+
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return "", err
+	}
+
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+
+	r, err := filepath.Rel(absRoot, absPath)
+	if err != nil {
+		return "", err
+	}
+
+	if r == ".." || strings.HasPrefix(r, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("%s: resolves outside of %s", rel, root)
+	}
+
+	return path, nil
 }
 
 // WriteManifest writes the manifest to the package's md5sums file, replacing

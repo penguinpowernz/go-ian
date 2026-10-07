@@ -39,12 +39,21 @@ func ReadDocFiles(path string) (DocFiles, error) {
 	}
 
 	var d DocFiles
-	for _, line := range str.Lines(string(data)) {
+	for i, line := range str.Lines(string(data)) {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		d = append(d, line)
+
+		// like the manifest, this list is committed and hand editable, and a
+		// source path pointing outside the repo would copy an arbitrary file
+		// into the package's doc dir while every sum still matched
+		path, err := manifestPath(line)
+		if err != nil {
+			return nil, fmt.Errorf("docfiles line %d: %s", i+1, err)
+		}
+
+		d = append(d, path)
 	}
 
 	return d, nil

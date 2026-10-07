@@ -608,14 +608,37 @@ var StageFiles = func(br *BuildRequest) error {
 	var staged, skipped int
 	for _, e := range m {
 		rel := br.Pkg.SourceFor(e.Path, docSrcs)
-		src := br.Pkg.Dir(rel)
-		if !file.Exists(src) {
+
+		// the source must stay within the repo and the destination within the
+		// staging dir, whatever the control files said
+		src, err := confine(br.Pkg.Dir(), rel)
+		if err != nil {
+			return fmt.Errorf("refusing to stage %s: %s", e.Path, err)
+		}
+
+		dst, err := confine(br.Tmp, e.Path)
+		if err != nil {
+			return fmt.Errorf("refusing to stage %s: %s", e.Path, err)
+		}
+
+		fi, err := os.Lstat(src)
+		switch {
+		case os.IsNotExist(err):
 			// already warned about by VerifyManifest in insecure mode; skip
 			br.dbg.File("SKIPPED", "", e.Path, "not in the repo")
 			skipped++
 			continue
+		case err != nil:
+			return fmt.Errorf("failed to stage %s: %s", e.Path, err)
 		}
-		dst := filepath.Join(br.Tmp, e.Path)
+
+		// CopyFile would follow a symlink and package whatever it resolves to,
+		// which may be outside the repo entirely.  `ian add` never registers
+		// one, so a symlink here came from a hand edited manifest.
+		if !fi.Mode().IsRegular() {
+			return fmt.Errorf("refusing to stage %s: %s is not a regular file", e.Path, rel)
+		}
+
 		if err := file.CopyFile(src, dst); err != nil {
 			return fmt.Errorf("failed to stage %s: %s", e.Path, err)
 		}

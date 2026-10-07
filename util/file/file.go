@@ -13,10 +13,13 @@ import (
 	"github.com/yargevad/filepathx"
 )
 
-// Exists returns true if the given path exists
+// Exists returns true if the given path exists.  An error other than "not
+// exists" (a permission denied on a parent directory, say) means the path
+// could not be resolved either way, which is reported as not existing rather
+// than as a file that is there but unreadable.
 func Exists(path string) bool {
 	_, err := os.Stat(path)
-	return !os.IsNotExist(err)
+	return err == nil
 }
 
 // ListFilesIn will give a list of all the files in the root of the given
