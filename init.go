@@ -43,7 +43,9 @@ func Initialize(dir string) error {
 	file.EmptyBashScript(pkg.CtrlDir("postrm"))
 	file.EmptyBashScript(pkg.CtrlDir("preinst"))
 
-	if err := os.WriteFile(pkg.Dir(".ianignore"), []byte(defaultIanignore), 0666); err != nil {
+	// Start with an empty manifest: nothing is included in the package until
+	// the developer registers files with `ian add`.
+	if err := file.EmptyDotFile(pkg.ManifestFile()); err != nil {
 		return err
 	}
 	file.EmptyDotFile(pkg.Dir(".ianpush"))
@@ -81,21 +83,3 @@ func FindMaintainer() (string, bool) {
 
 	return fmt.Sprintf("%s <%s>", name, email), true
 }
-
-// defaultIanignore is written to .ianignore on ian init.
-// Lines starting with '#' are treated as comments and ignored.
-// The following patterns are always excluded regardless of this file:
-//
-//	.git, pkg, .gitignore, .ianpush, .ianignore, .gitkeep, ./.*
-const defaultIanignore = `# Patterns listed here are excluded from the package in addition to the defaults.
-# Lines starting with '#' are comments.
-#
-# Always excluded by default:
-#   .git
-#   pkg
-#   .gitignore
-#   .ianpush
-#   .ianignore
-#   .gitkeep
-#   ./.* (all hidden files/folders at the root of IAN_DIR)
-`

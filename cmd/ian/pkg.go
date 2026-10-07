@@ -14,6 +14,7 @@ func init() {
 	pkgCmd.Flags().BoolP("dry-run", "n", false, "print files that would be included without building")
 	pkgCmd.Flags().BoolP("quiet", "q", false, "suppress output when building")
 	pkgCmd.Flags().BoolP("file-list", "f", false, "print file list to stderr instead of md5sums")
+	pkgCmd.Flags().BoolP("insecure", "k", false, "skip md5sum verification (warn instead of failing)")
 	rootCmd.AddCommand(pkgCmd)
 }
 
@@ -28,11 +29,12 @@ var pkgCmd = &cobra.Command{
 		quiet, _ := cmd.Flags().GetBool("quiet")
 		debug, _ := cmd.Flags().GetBool("debug")
 		fileList, _ := cmd.Flags().GetBool("file-list")
+		insecure, _ := cmd.Flags().GetBool("insecure")
 
 		if dryRun || (fileList && !quiet && !debug) {
-			files, err := PKG.ListFiles()
-			tell.IfFatalf(err, "failed to list package files")
-			for _, f := range files {
+			m, err := PKG.Manifest()
+			tell.IfFatalf(err, "failed to read manifest")
+			for _, f := range m.Paths() {
 				fmt.Fprintln(cmd.ErrOrStderr(), f)
 			}
 			if dryRun {
@@ -47,7 +49,7 @@ var pkgCmd = &cobra.Command{
 		}
 
 		pkgr := ian.DefaultPackager()
-		outfile, err := pkgr.BuildWithOpts(PKG, ian.BuildOpts{Outpath: outpath, Debug: debug, PrintMD5Sums: !quiet && !fileList})
+		outfile, err := pkgr.BuildWithOpts(PKG, ian.BuildOpts{Outpath: outpath, Debug: debug, PrintMD5Sums: !quiet && !fileList, Insecure: insecure})
 		tell.IfFatalf(err, "packaging failed")
 		fmt.Println(outfile)
 	},

@@ -1,6 +1,7 @@
 package ian
 
 import (
+	"os"
 	"path/filepath"
 	"strconv"
 
@@ -43,12 +44,21 @@ func (p *Pkg) CtrlFiles() []string {
 }
 
 // Size returns the total size of the files to be included
-// in the package
+// in the package, summed from the files listed in the manifest
 func (p *Pkg) Size() (string, error) {
-	size, err := file.DirSize(p.Dir(), p.Excludes())
+	m, err := p.Manifest()
 	if err != nil {
 		return "", err
 	}
 
-	return strconv.Itoa(size / 1024), nil
+	var size int64
+	for _, e := range m {
+		fi, err := os.Stat(p.Dir(e.Path))
+		if err != nil {
+			return "", err
+		}
+		size += fi.Size()
+	}
+
+	return strconv.Itoa(int(size) / 1024), nil
 }

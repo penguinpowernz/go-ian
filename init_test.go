@@ -26,7 +26,7 @@ func TestInit(t *testing.T) {
 
 			Convey("it should have the required files in it", func() {
 				So(fexists(dir+"/DEBIAN/postinst"), ShouldBeTrue)
-				So(fexists(dir+"/.ianignore"), ShouldBeTrue)
+				So(fexists(dir+"/DEBIAN/md5sums"), ShouldBeTrue)
 				So(fexists(dir+"/DEBIAN/control"), ShouldBeTrue)
 			})
 		})

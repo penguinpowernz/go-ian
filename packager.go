@@ -10,22 +10,29 @@ import (
 	"strings"
 
 	"github.com/penguinpowernz/go-ian/util/file"
-	"github.com/penguinpowernz/go-ian/util/str"
-	"github.com/penguinpowernz/go-ian/util/tell"
-	"github.com/penguinpowernz/md5walk"
 )
 
 // Debug is the default debug mode for the build options when they
 // are not explicity specified with the BuildWithOpts() call
 var Debug = false
 
+// MaintainerScripts are the control files that dpkg executes, and so are the
+// only ones staged as 0755.  Every other control file is data that dpkg only
+// reads (control, md5sums, conffiles, templates...) and is staged as 0644.
+var MaintainerScripts = map[string]bool{
+	"preinst":  true,
+	"postinst": true,
+	"prerm":    true,
+	"postrm":   true,
+	"config":   true,
+}
+
 // DefaultPackager returns a preconfigured packager
 // using the default packaging steps/strategies
 func DefaultPackager() (p Packager) {
 	return Packager{
+		VerifyManifest,
 		StageFiles,
-		CleanRoot,
-		CalculateMD5Sums,
 		CalculateSize,
 		PrintPackageTree,
 		DpkgDebBuild,
@@ -40,6 +47,7 @@ type BuildRequest struct {
 	debpath      string
 	Debug        bool
 	PrintMD5Sums bool
+	Insecure     bool
 }
 
 // CleanUp is run at the end of the package build to clean up
@@ -60,6 +68,7 @@ type BuildOpts struct {
 	Outpath      string
 	Debug        bool
 	PrintMD5Sums bool
+	Insecure     bool
 }
 
 // Build will create a debian package from the given control file and directory. It does this by
@@ -72,7 +81,7 @@ func (pkgr Packager) Build(p *Pkg) (string, error) {
 
 // BuildWithOpts does the same as build but with specifc options
 func (pkgr Packager) BuildWithOpts(p *Pkg, opts BuildOpts) (string, error) {
-	br := &BuildRequest{Pkg: p, debpath: opts.Outpath, Debug: opts.Debug, PrintMD5Sums: opts.PrintMD5Sums}
+	br := &BuildRequest{Pkg: p, debpath: opts.Outpath, Debug: opts.Debug, PrintMD5Sums: opts.PrintMD5Sums, Insecure: opts.Insecure}
 
 	for i, fn := range pkgr {
 		err := fn(br)
@@ -125,14 +134,21 @@ var DpkgDebBuild = func(br *BuildRequest) error {
 		return fmt.Errorf("failed to make package dir at %s: %s", br.debpath, err)
 	}
 
-	// ensure correct perms on ctrl dir
-	if err := os.Chmod(br.Pkg.dir, 0755); err != nil {
+	// ensure correct perms on the staged control dir
+	stagedCtrlDir := filepath.Join(br.Tmp, "DEBIAN")
+	if err := os.Chmod(stagedCtrlDir, 0755); err != nil {
 		return fmt.Errorf("failed to set the proper perms on the control dir")
 	}
 
-	// ensure correct perms on ctrl files
-	for _, fpath := range br.Pkg.CtrlFiles() {
-		if err := os.Chmod(fpath, 0755); err != nil {
+	// ensure correct perms on the staged control files: the maintainer scripts
+	// need to be executable, while data files like control, md5sums and
+	// conffiles are 0644 as dpkg only ever reads them
+	for _, fpath := range file.Glob(stagedCtrlDir, "*") {
+		mode := os.FileMode(0644)
+		if MaintainerScripts[filepath.Base(fpath)] {
+			mode = 0755
+		}
+		if err := os.Chmod(fpath, mode); err != nil {
 			return fmt.Errorf("failed to set the proper perms on the control file %s", fpath)
 		}
 	}
@@ -152,13 +168,13 @@ var DpkgDebBuild = func(br *BuildRequest) error {
 	return nil
 }
 
-// CalculateSize of a directory using du, excluding any given paths
+// CalculateSize of the staged package directory using du
 var CalculateSize = func(br *BuildRequest) error {
 	if br.Debug {
 		os.Stderr.WriteString("\n\n*** CalculateSize ***\n\n")
 	}
 
-	b, err := file.DirSize(br.Tmp, br.Pkg.Excludes())
+	b, err := file.DirSize(br.Tmp)
 	if err != nil {
 		return fmt.Errorf("failed to calculate package size: %s", err)
 	}
@@ -169,38 +185,34 @@ var CalculateSize = func(br *BuildRequest) error {
 	return nil
 }
 
-// CalculateMD5Sums is a packaging step that calculates the file sums
-var CalculateMD5Sums = func(br *BuildRequest) error {
+// VerifyManifest is a packaging step that checks every file in the manifest
+// against its recorded md5 sum before staging.  Unless the build is insecure
+// it fails on any mismatch or missing file; when insecure it only warns.
+var VerifyManifest = func(br *BuildRequest) error {
 	if br.Debug {
-		os.Stderr.WriteString("\n\n*** CalculateMD5Sums ***\n\n")
+		os.Stderr.WriteString("\n\n*** VerifyManifest ***\n\n")
 	}
 
-	outfile := (&Pkg{dir: br.Tmp}).CtrlDir("md5sums")
-	sums, err := md5walk.Walk(br.Tmp)
+	m, err := br.Pkg.Manifest()
 	if err != nil {
-		return fmt.Errorf("failed to generate md5sums: %s", err)
+		return fmt.Errorf("failed to read manifest: %s", err)
 	}
 
-	f, err := os.OpenFile(outfile, os.O_WRONLY|os.O_CREATE, 0755)
-	if err != nil {
-		return fmt.Errorf("failed to write md5sums: %s", err)
-	}
-	defer f.Close()
-
-	_, err = sums.Write(f)
-
-	if br.PrintMD5Sums || br.Debug {
-		os.Stderr.WriteString("\nMD5SUMS\n")
-		os.Stderr.WriteString("-------------------------------------------------\n")
-		sums.Write(os.Stderr)
-		os.Stderr.WriteString("-------------------------------------------------\n\n")
+	if len(m) == 0 {
+		return fmt.Errorf("no files registered in %s, use `ian add <file>` to register them", br.Pkg.ManifestFile())
 	}
 
+	problems, err := br.Pkg.Verify(br.Insecure)
+	for _, p := range problems {
+		os.Stderr.WriteString("WARNING: " + p + "\n")
+	}
 	return err
 }
 
 // StageFiles is a packaging step that stages the package files to a
-// temporary directory to work from
+// temporary directory to work from.  Only files listed in the manifest are
+// copied (each at its repo-relative path), followed by the DEBIAN control
+// files.  Nothing else from the repo is included.
 var StageFiles = func(br *BuildRequest) error {
 	if br.Debug {
 		os.Stderr.WriteString("\n\n*** StageFiles ***\n\n")
@@ -212,49 +224,51 @@ var StageFiles = func(br *BuildRequest) error {
 		return fmt.Errorf("couldn't make tmp dir: %s", err)
 	}
 
-	args := []string{"-rav"}
-	for _, s := range br.Pkg.Excludes() {
-		if s == "" {
-			continue
-		}
-		args = append(args, fmt.Sprintf("--exclude=%s", s))
-	}
-	args = append(args, br.Pkg.Dir()+"/", br.Tmp)
-
-	cmd := exec.Command("/usr/bin/rsync", args...)
 	if br.Debug {
 		os.Stderr.WriteString("\nStaging files to " + br.Tmp + "\n")
 		os.Stderr.WriteString("-------------------------------------------------\n")
-		tell.Debugf("running: %s", str.CommandString(cmd))
-		cmd.Stderr = os.Stderr
-		cmd.Stdout = os.Stderr
 	}
 
-	err = cmd.Run()
+	m, err := br.Pkg.Manifest()
+	if err != nil {
+		return fmt.Errorf("failed to read manifest: %s", err)
+	}
+
+	for _, e := range m {
+		src := br.Pkg.Dir(e.Path)
+		if !file.Exists(src) {
+			// already warned about by VerifyManifest in insecure mode; skip
+			continue
+		}
+		dst := filepath.Join(br.Tmp, e.Path)
+		if err := file.CopyFile(src, dst); err != nil {
+			return fmt.Errorf("failed to stage %s: %s", e.Path, err)
+		}
+		if br.Debug {
+			os.Stderr.WriteString(e.Path + "\n")
+		}
+	}
+
+	// stage the DEBIAN control files, including the md5sums manifest itself,
+	// which is copied in verbatim so the package ships exactly the sums that
+	// were committed and debsums works normally
+	for _, fpath := range br.Pkg.CtrlFiles() {
+		dst := filepath.Join(br.Tmp, "DEBIAN", filepath.Base(fpath))
+		if err := file.CopyFile(fpath, dst); err != nil {
+			return fmt.Errorf("failed to stage control file %s: %s", fpath, err)
+		}
+	}
 
 	if br.Debug {
 		os.Stderr.WriteString("-------------------------------------------------\n\n")
 	}
 
-	return err
-}
-
-// CleanRoot is a packaging step to clean the root folder of the
-// package so that the target root file system is not polluted
-var CleanRoot = func(br *BuildRequest) error {
-	if br.Debug {
-		os.Stderr.WriteString("\n\n*** CleanRoot ***\n\n")
+	if br.PrintMD5Sums || br.Debug {
+		os.Stderr.WriteString("\nMD5SUMS\n")
+		os.Stderr.WriteString("-------------------------------------------------\n")
+		m.Write(os.Stderr)
+		os.Stderr.WriteString("-------------------------------------------------\n\n")
 	}
 
-	list, err := file.ListFilesIn(br.Tmp)
-	if err != nil {
-		return fmt.Errorf("failed to find root files: %s", err)
-	}
-
-	docpath := filepath.Join(br.Tmp, "usr", "share", "doc", br.Pkg.ctrl.Name)
-	if err := os.MkdirAll(docpath, 0755); err != nil {
-		return fmt.Errorf("failed to create the doc path %s: %s", docpath, err)
-	}
-
-	return file.MoveFiles(list, docpath)
+	return nil
 }

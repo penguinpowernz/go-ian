@@ -1,0 +1,150 @@
+package main
+
+import (
+	"fmt"
+	"os"
+	"text/tabwriter"
+
+	ian "github.com/penguinpowernz/go-ian"
+	"github.com/penguinpowernz/go-ian/util/tell"
+	"github.com/spf13/cobra"
+)
+
+func init() {
+	statusCmd.Flags().BoolP("verbose", "v", false, "show the md5 sums of each file")
+	statusCmd.Flags().BoolP("quiet", "q", false, "print nothing, only set the exit code")
+	rootCmd.AddCommand(statusCmd)
+}
+
+// statusLabel is the short marker shown against each file in the status listing
+func statusLabel(s ian.FileState) string {
+	switch s {
+	case ian.StateModified:
+		return "modified"
+	case ian.StateMissing:
+		return "missing"
+	case ian.StateError:
+		return "error"
+	}
+	return "ok"
+}
+
+var statusCmd = &cobra.Command{
+	Use:   "status",
+	Short: "List registered files and whether they have changed",
+	Long: `List every file registered in DEBIAN/md5sums alongside its state: whether it
+still matches the manifest, has been modified, or has gone missing.  Exits
+non-zero when any file has drifted, so it can be used as a check in CI.
+
+Use -v to show the recorded sum of each file, and the current sum alongside it
+where the two differ.
+
+Only registered files are listed: unregistered files in the repo are not
+included in the package and so are not shown here.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		PKG = readPkg(DIR)
+
+		verbose, _ := cmd.Flags().GetBool("verbose")
+		quiet, _ := cmd.Flags().GetBool("quiet")
+
+		statuses, err := PKG.Status()
+		tell.IfFatalf(err, "failed to read manifest")
+
+		drifted := 0
+		for _, st := range statuses {
+			if st.State != ian.StateOK {
+				drifted++
+			}
+		}
+
+		if quiet {
+			if drifted > 0 {
+				os.Exit(1)
+			}
+			return
+		}
+
+		if len(statuses) == 0 {
+			fmt.Println("No files registered for packaging.")
+			fmt.Println("  (use \"ian add <file>...\" to register files to include in the package)")
+			return
+		}
+
+		// group by state so each group can carry its own hint, the way git
+		// status explains what to do about each section
+		groups := []struct {
+			state ian.FileState
+			title string
+			hints []string
+		}{
+			{
+				state: ian.StateModified,
+				title: "Changed since registered:",
+				hints: []string{
+					`(use "ian add <file>..." to record the new sum)`,
+					`(use "ian rm <file>..." to drop it from the package)`,
+				},
+			},
+			{
+				state: ian.StateMissing,
+				title: "Registered but missing from the repo:",
+				hints: []string{
+					`(use "ian rm <file>..." to unregister it)`,
+				},
+			},
+			{
+				state: ian.StateError,
+				title: "Could not be read:",
+			},
+			{
+				state: ian.StateOK,
+				title: "Registered and unchanged:",
+			},
+		}
+
+		for _, g := range groups {
+			var in []ian.FileStatus
+			for _, st := range statuses {
+				if st.State == g.state {
+					in = append(in, st)
+				}
+			}
+			if len(in) == 0 {
+				continue
+			}
+
+			fmt.Println(g.title)
+			for _, h := range g.hints {
+				fmt.Println("  " + h)
+			}
+			fmt.Println()
+
+			w := tabwriter.NewWriter(os.Stdout, 0, 8, 2, ' ', 0)
+			for _, st := range in {
+				switch {
+				case !verbose:
+					fmt.Fprintf(w, "\t%s\t%s\n", statusLabel(st.State), st.Path)
+				case st.State == ian.StateModified:
+					// show what was recorded and what is actually there now
+					fmt.Fprintf(w, "\t%s\t%s\t%s\tnow %s\n", statusLabel(st.State), st.Path, st.Want, st.Got)
+				case st.State == ian.StateError:
+					fmt.Fprintf(w, "\t%s\t%s\t%s\t%s\n", statusLabel(st.State), st.Path, st.Want, st.Err)
+				default:
+					fmt.Fprintf(w, "\t%s\t%s\t%s\n", statusLabel(st.State), st.Path, st.Want)
+				}
+			}
+			w.Flush()
+			fmt.Println()
+		}
+
+		if drifted == 0 {
+			fmt.Printf("%d file(s) registered, all match the manifest.\n", len(statuses))
+			fmt.Println("  (use \"ian add <file>...\" to register more, \"ian pkg\" to build)")
+			return
+		}
+
+		fmt.Printf("%d of %d registered file(s) have drifted.\n", drifted, len(statuses))
+		fmt.Println("  (\"ian pkg\" will refuse to build until this is resolved, or pass -k to build anyway)")
+		os.Exit(1)
+	},
+}
