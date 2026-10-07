@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -36,6 +37,7 @@ func DefaultPackager() (p Packager) {
 		CalculateSize,
 		PrintPackageTree,
 		DpkgDebBuild,
+		VerifyPackage,
 	}
 }
 
@@ -48,6 +50,10 @@ type BuildRequest struct {
 	Debug        bool
 	PrintMD5Sums bool
 	Insecure     bool
+
+	// SkipPackageCheck skips the post-build verification of the .deb entirely,
+	// rather than downgrading its failures to warnings the way Insecure does
+	SkipPackageCheck bool
 }
 
 // CleanUp is run at the end of the package build to clean up
@@ -65,10 +71,11 @@ type PackagerStrategy func(br *BuildRequest) error
 type Packager []PackagerStrategy
 
 type BuildOpts struct {
-	Outpath      string
-	Debug        bool
-	PrintMD5Sums bool
-	Insecure     bool
+	Outpath          string
+	Debug            bool
+	PrintMD5Sums     bool
+	Insecure         bool
+	SkipPackageCheck bool
 }
 
 // Build will create a debian package from the given control file and directory. It does this by
@@ -81,7 +88,14 @@ func (pkgr Packager) Build(p *Pkg) (string, error) {
 
 // BuildWithOpts does the same as build but with specifc options
 func (pkgr Packager) BuildWithOpts(p *Pkg, opts BuildOpts) (string, error) {
-	br := &BuildRequest{Pkg: p, debpath: opts.Outpath, Debug: opts.Debug, PrintMD5Sums: opts.PrintMD5Sums, Insecure: opts.Insecure}
+	br := &BuildRequest{
+		Pkg:              p,
+		debpath:          opts.Outpath,
+		Debug:            opts.Debug,
+		PrintMD5Sums:     opts.PrintMD5Sums,
+		Insecure:         opts.Insecure,
+		SkipPackageCheck: opts.SkipPackageCheck,
+	}
 
 	for i, fn := range pkgr {
 		err := fn(br)
@@ -183,6 +197,155 @@ var CalculateSize = func(br *BuildRequest) error {
 	br.Pkg.ctrl.WriteFile((&Pkg{dir: br.Tmp}).CtrlFile())
 	br.Pkg.ctrl.WriteFile(br.Pkg.CtrlFile())
 	return nil
+}
+
+// VerifyPackage is a packaging step that checks the built package against the
+// manifest, after dpkg-deb has produced it.  It does two things:
+//
+//  1. reads the md5sums control file back out of the .deb and compares it to
+//     the committed manifest, catching anything that went wrong between the
+//     manifest and what was shipped
+//  2. extracts the package contents and rehashes every file, so a file whose
+//     sum changed between being verified and being packaged is caught
+//
+// This is the end to end check that what was released matches what was
+// registered.  As with the pre-build verification, an insecure build only warns.
+var VerifyPackage = func(br *BuildRequest) error {
+	if br.Debug {
+		os.Stderr.WriteString("\n\n*** VerifyPackage ***\n\n")
+	}
+
+	if br.SkipPackageCheck {
+		if br.Debug {
+			os.Stderr.WriteString("WARNING: skipped final package check\n")
+		}
+		return nil
+	}
+
+	m, err := br.Pkg.Manifest()
+	if err != nil {
+		return fmt.Errorf("failed to read manifest: %s", err)
+	}
+
+	tmp, err := ioutil.TempDir("/tmp", "go-ian-verify")
+	if err != nil {
+		return fmt.Errorf("couldn't make tmp dir: %s", err)
+	}
+	defer os.RemoveAll(tmp)
+
+	var problems []string
+
+	// 1. the md5sums shipped inside the package
+	ctrlDir := filepath.Join(tmp, "control")
+	cmd := exec.Command("/usr/bin/dpkg-deb", "--control", br.debpath, ctrlDir)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to read control files from %s: %s: %s", br.debpath, err, strings.TrimSpace(string(out)))
+	}
+
+	shipped, err := ReadManifest(filepath.Join(ctrlDir, "md5sums"))
+	if err != nil {
+		return fmt.Errorf("failed to read the packaged md5sums: %s", err)
+	}
+
+	problems = append(problems, diffManifests(m, shipped)...)
+
+	// 2. the files themselves, rehashed from the package contents
+	fsysDir := filepath.Join(tmp, "fsys")
+	cmd = exec.Command("/usr/bin/dpkg-deb", "--extract", br.debpath, fsysDir)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to extract %s: %s: %s", br.debpath, err, strings.TrimSpace(string(out)))
+	}
+
+	for _, e := range m {
+		path := filepath.Join(fsysDir, e.Path)
+		if !file.Exists(path) {
+			problems = append(problems, fmt.Sprintf("%s: registered but not in the built package", e.Path))
+			continue
+		}
+
+		sum, err := Sum(path)
+		if err != nil {
+			problems = append(problems, fmt.Sprintf("%s: %s", e.Path, err))
+			continue
+		}
+
+		if sum != e.Sum {
+			problems = append(problems, fmt.Sprintf("%s: packaged file does not match the manifest (want %s, got %s)", e.Path, e.Sum, sum))
+		}
+	}
+
+	// anything in the package that was never registered should not be there
+	err = filepath.Walk(fsysDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() || !info.Mode().IsRegular() {
+			return err
+		}
+
+		rel, err := filepath.Rel(fsysDir, path)
+		if err != nil {
+			return err
+		}
+
+		for _, e := range m {
+			if e.Path == rel {
+				return nil
+			}
+		}
+
+		problems = append(problems, fmt.Sprintf("%s: in the built package but not registered", rel))
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("failed to walk the built package: %s", err)
+	}
+
+	for _, p := range problems {
+		os.Stderr.WriteString("WARNING: " + p + "\n")
+	}
+
+	if len(problems) > 0 && !br.Insecure {
+		return fmt.Errorf("the built package does not match the manifest for %d file(s)", len(problems))
+	}
+
+	if br.Debug {
+		os.Stderr.WriteString(fmt.Sprintf("verified %d file(s) in %s\n", len(m), br.debpath))
+	}
+
+	return nil
+}
+
+// diffManifests compares the committed manifest against the one shipped inside
+// the built package, returning a problem for each difference
+func diffManifests(committed, shipped Manifest) []string {
+	var problems []string
+
+	shippedSums := make(map[string]string, len(shipped))
+	for _, e := range shipped {
+		shippedSums[e.Path] = e.Sum
+	}
+
+	committedSums := make(map[string]string, len(committed))
+	for _, e := range committed {
+		committedSums[e.Path] = e.Sum
+	}
+
+	for _, e := range committed {
+		sum, ok := shippedSums[e.Path]
+		switch {
+		case !ok:
+			problems = append(problems, fmt.Sprintf("%s: missing from the packaged md5sums", e.Path))
+		case sum != e.Sum:
+			problems = append(problems, fmt.Sprintf("%s: packaged md5sums says %s, manifest says %s", e.Path, sum, e.Sum))
+		}
+	}
+
+	for _, e := range shipped {
+		if _, ok := committedSums[e.Path]; !ok {
+			problems = append(problems, fmt.Sprintf("%s: in the packaged md5sums but not the manifest", e.Path))
+		}
+	}
+
+	sort.Strings(problems)
+	return problems
 }
 
 // VerifyManifest is a packaging step that checks every file in the manifest
