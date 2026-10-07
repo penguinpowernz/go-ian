@@ -4,12 +4,11 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
-	"strings"
 
+	"github.com/penguinpowernz/go-ian/util/deb"
 	"github.com/penguinpowernz/go-ian/util/file"
 )
 
@@ -36,7 +35,7 @@ func DefaultPackager() (p Packager) {
 		StageFiles,
 		CalculateSize,
 		VerifyStaging,
-		DpkgDebBuild,
+		BuildDeb,
 		VerifyPackage,
 	}
 }
@@ -118,9 +117,13 @@ func (pkgr Packager) BuildWithOpts(p *Pkg, opts BuildOpts) (string, error) {
 	return br.debpath, nil
 }
 
-// DpkgDebBuild is a packaging step that builds the package using dpkg-deb
-var DpkgDebBuild = func(br *BuildRequest) error {
-	br.dbg.Step("building the package with dpkg-deb")
+// BuildDeb is a packaging step that writes the staged tree out as a .deb.
+//
+// This writes the archive in process rather than calling out to fakeroot and
+// dpkg-deb, so the build depends only on the Go toolchain and not on two
+// binaries from the host's /usr/bin.  See util/deb for the format details.
+var BuildDeb = func(br *BuildRequest) error {
+	br.dbg.Step("writing the package")
 
 	if br.Debug {
 		br.dbg.Section("control file that will be used for the package")
@@ -161,14 +164,12 @@ var DpkgDebBuild = func(br *BuildRequest) error {
 
 	br.debpath = filepath.Join(br.debpath, br.Pkg.ctrl.Filename())
 
-	cmd := exec.Command("/usr/bin/fakeroot", "dpkg-deb", "-b", "-Zgzip", br.Tmp, br.debpath)
 	if br.Debug {
-		br.dbg.Section("%s", strings.Join(cmd.Args, " "))
-		cmd.Stderr = os.Stderr
-		cmd.Stdout = os.Stderr
+		br.dbg.Section("writing %s from %s", br.debpath, br.Tmp)
+		br.dbg.EndSection()
 	}
 
-	if err := cmd.Run(); err != nil {
+	if err := deb.Build(br.Tmp, br.debpath, deb.BuildOpts{}); err != nil {
 		return fmt.Errorf("failed to build package %s from %s: %s", br.debpath, br.Tmp, err)
 	}
 
@@ -229,9 +230,8 @@ var VerifyPackage = func(br *BuildRequest) error {
 
 	// 1. the md5sums shipped inside the package
 	ctrlDir := filepath.Join(tmp, "control")
-	cmd := exec.Command("/usr/bin/dpkg-deb", "--control", br.debpath, ctrlDir)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to read control files from %s: %s: %s", br.debpath, err, strings.TrimSpace(string(out)))
+	if err := deb.ExtractControl(br.debpath, ctrlDir); err != nil {
+		return fmt.Errorf("failed to read control files from %s: %s", br.debpath, err)
 	}
 
 	shipped, err := ReadManifest(filepath.Join(ctrlDir, "md5sums"))
@@ -263,9 +263,8 @@ var VerifyPackage = func(br *BuildRequest) error {
 
 	// 2. the files themselves, rehashed from the package contents
 	fsysDir := filepath.Join(tmp, "fsys")
-	cmd = exec.Command("/usr/bin/dpkg-deb", "--extract", br.debpath, fsysDir)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to extract %s: %s: %s", br.debpath, err, strings.TrimSpace(string(out)))
+	if err := deb.ExtractData(br.debpath, fsysDir); err != nil {
+		return fmt.Errorf("failed to extract %s: %s", br.debpath, err)
 	}
 
 	br.dbg.Section("files rehashed from %s", br.debpath)

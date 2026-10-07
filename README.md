@@ -197,7 +197,9 @@ package for ian, using ian.  Give it a try!
 * [x] don't shell out for md5sums
 * [x] don't shell out for rsync
 * [x] don't shell out for find
-* [ ] don't shell out for dpkg-deb
+* [x] don't shell out for dpkg-deb
+* [x] don't shell out for fakeroot
+* [x] don't shell out for du
 * [x] pull maintainer from git config
 
 ## Contributor Code of Conduct
