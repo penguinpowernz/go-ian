@@ -477,6 +477,64 @@ func (p *Pkg) addEntry(path, sum string) error {
 	return p.WriteManifest(m)
 }
 
+// UpdateFiles re-sums every registered file whose contents no longer match the
+// manifest, writing the updated manifest back to disk.  This is the bulk form
+// of re-running `ian add` over each file that `ian status` reports as modified,
+// so that a round of edits can be re-registered in one go.
+//
+// Only modified entries are touched.  Entries that are missing from the repo or
+// cannot be read are left alone and returned as problems, since re-summing is
+// not what they need: a missing file has to be either restored or unregistered
+// with `ian rm`, and silently dropping it would quietly shrink the package.
+//
+// It returns the paths that were re-summed, in sorted order, and the problems
+// for the entries it could not update.
+func (p *Pkg) UpdateFiles() ([]string, []string, error) {
+	statuses, err := p.Status()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	m, err := p.Manifest()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// index the manifest by path so each drifted entry can be updated in place,
+	// which keeps the sums of everything else exactly as they were
+	at := make(map[string]int, len(m))
+	for i, e := range m {
+		at[e.Path] = i
+	}
+
+	var updated, problems []string
+	for _, st := range statuses {
+		if st.State != StateModified {
+			if msg := st.Problem(); msg != "" {
+				problems = append(problems, msg)
+			}
+			continue
+		}
+
+		i, ok := at[st.Path]
+		if !ok {
+			continue
+		}
+
+		// Status already computed the sum of the file on disk, so take it from
+		// there rather than reading every drifted file a second time
+		m[i].Sum = st.Got
+		updated = append(updated, st.Path)
+	}
+
+	if len(updated) == 0 {
+		return nil, problems, nil
+	}
+
+	sort.Strings(updated)
+	return updated, problems, p.WriteManifest(m)
+}
+
 // RemoveFiles drops the given paths' entries from the manifest, writing the
 // updated manifest back to disk.  The files themselves are left alone:
 // unregistering only means they are no longer included in the package.
