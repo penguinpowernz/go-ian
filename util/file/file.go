@@ -5,10 +5,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strconv"
-	"strings"
 
 	"github.com/yargevad/filepathx"
 )
@@ -76,15 +73,39 @@ func MoveFiles(paths []string, dest string) error {
 
 }
 
-// DirSize uses du to calculate the directory size in bytes
+// DirSize calculates the apparent size of the directory tree in bytes.  It
+// walks the tree in process rather than shelling out to du, both so a build
+// does not depend on an external binary and because du -b is GNU only.
+//
+// Only regular files count towards the total.  Symlinks are counted by the
+// size of the link target path rather than followed, so a link cannot inflate
+// the total with the size of whatever it points at.
 func DirSize(dir string) (int, error) {
-	cmd := exec.Command("/usr/bin/du", "-bs", dir)
-	data, err := cmd.Output()
+	var total int64
+
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		switch {
+		case info.Mode().IsRegular():
+			total += info.Size()
+		case info.Mode()&os.ModeSymlink != 0:
+			target, err := os.Readlink(path)
+			if err != nil {
+				return err
+			}
+			total += int64(len(target))
+		}
+
+		return nil
+	})
 	if err != nil {
 		return 0, err
 	}
 
-	return strconv.Atoi(strings.Split(string(data), "\t")[0])
+	return int(total), nil
 }
 
 // CopyFile copies the file at src to dst, creating any parent directories of
