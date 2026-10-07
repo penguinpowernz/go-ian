@@ -174,6 +174,15 @@ func TestSerializeRoundTrip(t *testing.T) {
 			deps := []string{"bash (>= 4.0)", "curl"}
 			So(unserialize(serialize(deps)), ShouldResemble, deps)
 		})
+
+		// removing a dependency used to leave a blank entry behind, which
+		// rendered as a stray comma in the field, eg. "Depends: , curl"
+		Convey("blank entries do not become stray commas", func() {
+			So(serialize([]string{"", "curl", ""}), ShouldEqual, "curl")
+			So(serialize([]string{"curl", "  "}), ShouldEqual, "curl")
+			So(serialize([]string{"", ""}), ShouldEqual, "")
+			So(serialize([]string{}), ShouldEqual, "")
+		})
 	})
 }
 
@@ -187,6 +196,29 @@ func TestStringOmitsEmptyLists(t *testing.T) {
 			So(s, ShouldNotContainSubstring, "Conflicts:")
 			So(s, ShouldNotContainSubstring, "Provides:")
 			So(s, ShouldNotContainSubstring, "Replaces:")
+		})
+	})
+
+	// emptying the list leaves it non-nil, which structs does not call zero,
+	// so the field used to be written out as a bare "Depends: " line
+	Convey("given a control file whose dependencies have all been removed", t, func() {
+		c := Default("my-app")
+		c.Depends = []string{"curl"}
+		c.Depends = c.Depends[:0]
+
+		Convey("the field is left out rather than written empty", func() {
+			s := c.String()
+			So(s, ShouldNotContainSubstring, "Depends")
+		})
+	})
+
+	Convey("given a control file whose dependencies are all blank", t, func() {
+		c := Default("my-app")
+		c.Depends = []string{"", " "}
+
+		Convey("the field is left out rather than written as commas", func() {
+			s := c.String()
+			So(s, ShouldNotContainSubstring, "Depends")
 		})
 	})
 

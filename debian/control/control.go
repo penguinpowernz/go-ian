@@ -85,6 +85,13 @@ func (c Control) String() string {
 				continue
 			}
 			value = serialize(slice)
+
+			// an emptied slice is not zero to structs (only a nil one is), and
+			// a slice of only blanks serializes to stray commas, so check the
+			// serialized value rather than relying on IsZero alone
+			if value == "" && omitempty {
+				continue
+			}
 		case reflect.String:
 			value, ok = f.Value().(string)
 		}
@@ -193,7 +200,16 @@ func Read(fn string) (Control, error) {
 }
 
 func serialize(strs []string) string {
-	return strings.Join(strs, ", ")
+	// drop blanks so that an emptied or hand edited field cannot produce a
+	// value made of stray commas, like "Depends: , curl, "
+	kept := make([]string, 0, len(strs))
+	for _, s := range strs {
+		if s = strings.TrimSpace(s); s != "" {
+			kept = append(kept, s)
+		}
+	}
+
+	return strings.Join(kept, ", ")
 }
 
 func unserialize(s string) []string {

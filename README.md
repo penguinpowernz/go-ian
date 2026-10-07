@@ -173,7 +173,7 @@ Some other commands:
     ian migrate     # migrates a pre-v4.0.0 package to the manifest format
     ian pkg -n      # lists the files that would be included, without building
     ian -V          # prints the ian version
-    ian deps        # prints the dependencies line by line
+    ian deps        # prints the dependencies, and hints how to modify
 
 You can also use the envvar `IAN_DIR` instead of `-d` in the same way that you would use `GIT_DIR` - that is, to do stuff
 with ian but from a different folder location.
