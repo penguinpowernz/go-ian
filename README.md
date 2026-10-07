@@ -40,15 +40,15 @@ have since drifted.
 
 ## Requirements
 
-I shell out a bit to save time, will eventually make things more native.  For now, need the following tools:
+Building a package needs nothing but the `ian` binary itself.  The package is written in process using only
+the Go standard library, so `dpkg-deb`, `fakeroot`, `md5sum` and `du` are no longer required.
 
-* dpkg-deb
-* fakeroot
-* du
+Two optional features still call out to external tools:
 
-This should do it.
+* `ian push` runs whatever transport you configure in `.ianpush` (`scp`, `rsync`, a custom script...)
+* `git` is used to default the maintainer from `git config`, and for `ian set -V` (`git describe`)
 
-    sudo apt-get install fakeroot dpkg-dev coreutils findutils
+Neither is on the package build path.
 
 ## Installation
 
@@ -62,17 +62,18 @@ Or you can download a pre-built binary or Debian package from [the releases page
 ## Usage
 
 This tool is used for working with what Debian called "Binary packages" - that is ones that have the `DEBIAN`
-folder in capitals to slap Debian packages together quickly. It uses dpkg-deb -b in the background which most
-Debian package maintainers frown at but it is suitable enough for rolling your own packages quickly, and it
-scratches an itch.
+folder in capitals to slap Debian packages together quickly. It writes the `.deb` directly rather than going
+through `dpkg-buildpackage`, which most Debian package maintainers frown at, but it is suitable enough for
+rolling your own packages quickly, and it scratches an itch.
 
 ### Initializing
 
     ian init
 
-Analagous to `git init` this will do the same as `new` but do it in the current folder.
+Analagous to `git init`, this turns the current folder into an ian package.
 
-Now you will see you have a `DEBIAN` folder with a `control` and `postinst` file.
+Now you will see you have a `DEBIAN` folder containing a `control` file, an empty `md5sums` manifest, a
+`docfiles` list, and `preinst`/`postinst`/`prerm`/`postrm` maintainer scripts.
 
 ### Info
 
@@ -108,8 +109,17 @@ Before staging, every file's MD5 sum is verified against the manifest.  If any f
 longer matches, the build **fails** — protecting you from shipping a file that changed since it was registered.
 Pass `-k` / `--insecure` to downgrade these failures to warnings and build anyway.
 
+After the package is written it is read back and checked: the `md5sums` shipped inside the `.deb` is compared
+against the committed manifest, and every file is extracted and rehashed, so a file that changed between being
+verified and being packaged is caught. Pass `-K` / `--no-package-check` to skip this, or `-k` to downgrade
+its failures to warnings.
+
 By default the file list is printed before building. Use `-q` to suppress it, or `-n` for a dry run that prints
 the files without building.
+
+Builds are reproducible: the same staged tree always produces a byte identical `.deb`. Archive timestamps are
+pinned rather than taken from the files on disk, so you can build the same commit twice — ideally on two
+different machines — and compare the hashes. Set `SOURCE_DATE_EPOCH` to choose the timestamp.
 
 ### Push
 
@@ -142,13 +152,13 @@ Some other commands:
     ian status      # shows which registered files have changed or gone missing
     ian migrate     # migrates a pre-v4.0.0 package to the manifest format
     ian pkg -n      # lists the files that would be included, without building
-    ian -v          # prints the ian version
+    ian -V          # prints the ian version
     ian deps        # prints the dependencies line by line
 
 You can also use the envvar `IAN_DIR` instead of `-d` in the same way that you would use `GIT_DIR` - that is, to do stuff
 with ian but from a different folder location.
 
-Use `DEBUG=1 ian pkg` to show debug logs for ian commands.
+Use `ian pkg -x` to show debug logs while building.
 
 ## Library Usage
 
@@ -176,7 +186,7 @@ package for ian, using ian.  Give it a try!
     go install github.com/penguinpowernz/go-ian/cmd/ian
     cd $GOPATH/src/github.com/penguinpowernz/go-ian/dpkg
     ian pkg
-    sudo dpkg -i pkg/ian_v1.0.0_amd64.deb
+    sudo dpkg -i pkg/ian_*.deb
 
 ## TODO
 
@@ -188,7 +198,7 @@ package for ian, using ian.  Give it a try!
 * [x] ignore file
 * [x] allow specifying where to output the package to after building
 * [x] deps management
-* [x] install after packaging
+* [ ] install after packaging
 * [ ] package a specific version
 * [ ] optional semver enforcement
 * [ ] utilize rules file
