@@ -4,7 +4,6 @@ go 1.17
 
 require (
 	github.com/fatih/structs v1.1.0
-	github.com/penguinpowernz/md5walk v0.0.0-20180130084601-669703a580bf
 	github.com/smartystreets/goconvey v1.6.4
 	github.com/spf13/cobra v1.10.1
 	github.com/spf13/pflag v1.0.9

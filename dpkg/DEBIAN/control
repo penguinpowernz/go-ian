@@ -7,7 +7,7 @@ Maintainer: Robert McLeod <robert@autogrow.com>
 Essential: no
 Homepage: https://github.com/penguinpowernz/go-ian
 Installed-Size: 3180
-Depends: fakeroot, dpkg-dev, rsync, coreutils, findutils
+Depends: fakeroot, dpkg-dev, coreutils, findutils
 Description: Debian Package Management
   Provides a command to help with managing Debian
   packages in a git repository
