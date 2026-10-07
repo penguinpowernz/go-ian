@@ -54,7 +54,6 @@ Neither is on the package build path.
 
 Simple to build / install, provided you have go setup:
 
-    go get github.com/penguinpowernz/go-ian
     go install github.com/penguinpowernz/go-ian/cmd/ian
 
 Or you can download a pre-built binary or Debian package from [the releases page](https://github.com/penguinpowernz/go-ian/releases).
@@ -87,15 +86,37 @@ The architecture and the version can be set quickly in this manner.  Other field
 
     ian set -a amd64
     ian set -v 1.2.3-test
+    ian set -V  # this will set the version from the git tags
 
-### Registering files for the package
+### Git like file addition
 
     ian add usr/bin/myapp etc/myapp/config.yml
 
 `ian` decides what goes into the package using the `DEBIAN/md5sums` manifest: **only files listed there are
 included**, so the Debian packaging metadata can live happily alongside your source without dragging unwanted
 files into the package.  `ian add` computes the MD5 sum of each given file and records it in `DEBIAN/md5sums`
-(standard Debian format, paths relative to the package root).  Re-running `ian add` on a file updates its sum.
+(standard Debian format, paths relative to the package root).
+
+Re-running `ian add` on a file updates its sum, so if you update something in the package it will enter your
+git commit record so the package contents are auditable.
+
+You can also remove files. Then they will no longer be included in the package when you rebuild.
+
+    ian rm usr/bin/myapp
+
+You can always run `ian status` to see what files have changed.
+
+    $ ian status
+    Registered and unchanged:
+
+      ok        usr/bin/ian
+
+    1 file(s) registered, all match the manifest.
+      (use "ian add <file>..." to register more, "ian pkg" to build)
+
+If you want to update all of the files that you have modified (that already exist in the manifest) at once just do:
+
+    ian add -u
 
 ### Packaging
 
@@ -107,15 +128,13 @@ packaging.  The package will be output to a `pkg` directory in the root of the r
 
 Before staging, every file's MD5 sum is verified against the manifest.  If any file is missing or its sum no
 longer matches, the build **fails** — protecting you from shipping a file that changed since it was registered.
-Pass `-k` / `--insecure` to downgrade these failures to warnings and build anyway.
+Pass `-k` / `--insecure` to downgrade these failures to warnings and build anyway. The files are also verified
+in staging right before the package is built to prevent something modifying your staging dir unnoticed.
 
 After the package is written it is read back and checked: the `md5sums` shipped inside the `.deb` is compared
 against the committed manifest, and every file is extracted and rehashed, so a file that changed between being
 verified and being packaged is caught. Pass `-K` / `--no-package-check` to skip this, or `-k` to downgrade
 its failures to warnings.
-
-By default the file list is printed before building. Use `-q` to suppress it, or `-n` for a dry run that prints
-the files without building.
 
 Builds are reproducible: the same staged tree always produces a byte identical `.deb`. Archive timestamps are
 pinned rather than taken from the files on disk, so you can build the same commit twice — ideally on two
@@ -125,7 +144,7 @@ different machines — and compare the hashes. Set `SOURCE_DATE_EPOCH` to choose
 
     ian push [target]
 
-Setup scripts to run in a file called `.ianpush` in the repo root and running `ian push` will run all the lines in
+Setup scripts to run in a file called `.ianpush` in the repo root, and running `ian push` will run all the lines in
 the file as commands with the current package.  The package filename will be appended to each command unless `$PKG`
 is found on the line, in which case that will be replaced with the package filename.  Also the target name can be
 given as an argument to push to specfic targets (supports globbing).
@@ -146,9 +165,10 @@ Some other commands:
 
     ian -d dpkg pkg # uses the folder called `dpkg` as the package root
     ian add <file>  # registers a file (and its md5sum) for inclusion
+    ian add -u      # re-registers every registered file that has changed
     ian rm <file>   # unregisters a file, leaving it on disk
     ian doc         # lists doc files and where they install to
-    ian doc <file>  # registers a file to install into /usr/share/doc
+    ian doc <file>  # registers a file to install into /usr/share/doc/<package-name>
     ian status      # shows which registered files have changed or gone missing
     ian migrate     # migrates a pre-v4.0.0 package to the manifest format
     ian pkg -n      # lists the files that would be included, without building
@@ -184,13 +204,19 @@ package for ian, using ian.  Give it a try!
 
     go get github.com/penguinpowernz/go-ian
     go install github.com/penguinpowernz/go-ian/cmd/ian
-    cd $GOPATH/src/github.com/penguinpowernz/go-ian/dpkg
-    ian pkg
+    cd $GOPATH/src/github.com/penguinpowernz/go-ian
+    make
+    cp ian usr/bin/ian
+    ./ian status   # probably the 
+    ./ian add -u
+    ./ian pkg -x   # use the debug flag to see exactly how the package process works
     sudo dpkg -i pkg/ian_*.deb
+
+Notice that README.md appears at `/usr/share/doc/ian/README.md` because it is added to the `DEBIAN/docfiles`.
 
 ## TODO
 
-* [ ] more tests
+* [x] more tests
 * [x] add help page
 * [x] add subcommands help
 * [x] pushing
@@ -198,8 +224,7 @@ package for ian, using ian.  Give it a try!
 * [x] ignore file
 * [x] allow specifying where to output the package to after building
 * [x] deps management
-* [ ] install after packaging
-* [ ] package a specific version
+* [ ] package a specific version using git tags
 * [ ] optional semver enforcement
 * [ ] utilize rules file
 * [ ] support copyright file
