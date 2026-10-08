@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/penguinpowernz/go-ian/util/colour"
 	"github.com/penguinpowernz/go-ian/util/tell"
@@ -11,6 +12,7 @@ import (
 
 func init() {
 	addCmd.Flags().BoolP("update", "u", false, "re-register every registered file that has changed")
+	addCmd.Flags().BoolP("all-arches", "a", false, "register the file in the manifests of every architecture")
 	rootCmd.AddCommand(addCmd)
 }
 
@@ -28,13 +30,24 @@ are never registered.
 Use -u to re-record the sums of all already registered files that have changed,
 without naming any of them: it updates everything "ian status" reports as
 modified.  Registered files that have gone missing are reported and left alone,
-as they need restoring or "ian rm" rather than a new sum.`,
+as they need restoring or "ian rm" rather than a new sum.
+
+Use -a to register the file in every architecture's manifest at once, rather
+than only the one for the architecture in the control file.  This is for files
+that are the same on every architecture, such as a config file or a unit file.
+Do not use it for a cross-compiled binary: those are different bytes per
+architecture, so one sum cannot describe them all.`,
 	Args: func(cmd *cobra.Command, args []string) error {
 		// -u takes its file list from the manifest, so it both needs no
 		// arguments and would be ambiguous alongside them
 		if update, _ := cmd.Flags().GetBool("update"); update {
 			if len(args) > 0 {
 				return fmt.Errorf("-u updates all changed files, so it takes no file arguments")
+			}
+			// -u re-sums what each manifest already records, which is per
+			// arch by definition, so there is nothing for -a to mean here
+			if all, _ := cmd.Flags().GetBool("all-arches"); all {
+				return fmt.Errorf("-u and -a cannot be combined: -u updates the manifest for the current architecture")
 			}
 			return nil
 		}
@@ -53,6 +66,11 @@ as they need restoring or "ian rm" rather than a new sum.`,
 
 		if len(files) == 0 {
 			tell.Fatalf("no files found to add")
+		}
+
+		if all, _ := cmd.Flags().GetBool("all-arches"); all {
+			runAddAllArches(files)
+			return
 		}
 
 		for _, f := range files {
@@ -85,5 +103,17 @@ func runUpdate() {
 	// the same way "ian status" does
 	if len(problems) > 0 {
 		os.Exit(1)
+	}
+}
+
+// runAddAllArches registers each file in every architecture's manifest, naming
+// the manifests written so it is clear the file went further than the current
+// architecture
+func runAddAllArches(files []string) {
+	for _, f := range files {
+		written, err := PKG.AddFileAllArches(f)
+		tell.IfFatalf(err, "failed to add %s", f)
+
+		fmt.Printf("added %s to %s\n", f, strings.Join(written, ", "))
 	}
 }

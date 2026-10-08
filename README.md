@@ -27,6 +27,8 @@ What changed:
 * bare files in the repo root are no longer swept into `/usr/share/doc` automatically — they are registered
   explicitly with `ian doc`, which records them in `DEBIAN/docfiles`
 * `ian pkg` fails if a registered file no longer matches its recorded sum (pass `-k` to downgrade to a warning)
+* sums are kept per architecture in `DEBIAN/md5sums.<arch>`, so a package released for several architectures can
+  commit all of them — see [Multiple architectures](#multiple-architectures)
 
 To migrate an existing package, run this in the package directory:
 
@@ -118,13 +120,40 @@ If you want to update all of the files that you have modified (that already exis
 
     ian add -u
 
+### Multiple architectures
+
+I want to make it so that if you need to release the same code for multiple architectures from the same repo
+you get the same benefits. A cross-compiled binary is different bytes on every architecture, so one `md5sums`
+could only ever vouch for whichever arch was built last.
+
+The sums are therefore kept per architecture in `DEBIAN/md5sums.<arch>`, which lets every architecture's sums
+be committed side by side and each build verify strictly against its own:
+
+    ian set -a amd64 && cp build/app.amd64 usr/bin/app && ian add usr/bin/app   # -> DEBIAN/md5sums.amd64
+    ian set -a i386 && cp build/app.i386 usr/bin/app && ian add usr/bin/app     # -> DEBIAN/md5sums.i386
+
+Commit all of them.  `ian pkg` reads the manifest for the architecture in the control file and ships it inside
+the `.deb` as plain `md5sums`, so `debsums` works normally and the other architectures' manifests are left out
+of the package.
+
+**You can check the Makefile in this project to see how `ian` itself is released for multiple architectures from
+the single repo.**
+
+An architecture of `all` means the contents don't vary, so it uses the plain `DEBIAN/md5sums` and never gets a
+qualified manifest.
+
+Files that are identical on every architecture — a config file, a systemd unit, a script — don't need
+registering once per arch.  `ian add -a` records them in every manifest at once:
+
+    $ ian add -a etc/app.conf
+    added etc/app.conf to md5sums, md5sums.amd64, md5sums.arm64
 ### Packaging
 
     ian pkg
 
-The one you came here for.  Stages the files listed in `DEBIAN/md5sums` into a debian package, copies the
-`DEBIAN/md5sums` manifest in verbatim (so `debsums` works normally) and calculates the package size prior to
-packaging.  The package will be output to a `pkg` directory in the root of the repo.
+The one you came here for.  Stages the files listed in the manifest for the package's architecture into a
+debian package, copies that manifest in verbatim as `md5sums` (so `debsums` works normally) and calculates the
+package size prior to packaging.  The package will be output to a `pkg` directory in the root of the repo.
 
 Before staging, every file's MD5 sum is verified against the manifest.  If any file is missing or its sum no
 longer matches, the build **fails** — protecting you from shipping a file that changed since it was registered.
@@ -169,7 +198,7 @@ Some other commands:
     ian rm <file>   # unregisters a file, leaving it on disk
     ian doc         # lists doc files and where they install to
     ian doc <file>  # registers a file to install into /usr/share/doc/<package-name>
-    ian status      # shows which registered files have changed or gone missing
+    ian status      # shows which registered files have changed, and which manifest it read
     ian migrate     # migrates a pre-v4.0.0 package to the manifest format
     ian pkg -n      # lists the files that would be included, without building
     ian -V          # prints the ian version
@@ -203,13 +232,13 @@ The debian package source for Ian is actually managed by Ian in the folder `dpkg
 package for ian, using ian.  Give it a try!
 
     go get github.com/penguinpowernz/go-ian
-    go install github.com/penguinpowernz/go-ian/cmd/ian
     cd $GOPATH/src/github.com/penguinpowernz/go-ian
-    make
-    cp ian usr/bin/ian
-    ./ian status   # probably the 
-    ./ian add -u
-    ./ian pkg -x   # use the debug flag to see exactly how the package process works
+    make build         # builds for amd64
+    cp ian usr/bin/ian # copy it into the package location
+    ./ian set -a amd64 # switch to the amd64 arch
+    ./ian status
+    ./ian add -u       # update it if your binary build was different
+    ./ian pkg -x       # use the debug flag to see exactly how the package process works
     sudo dpkg -i pkg/ian_*.deb
 
 Notice that README.md appears at `/usr/share/doc/ian/README.md` because it is added to the `DEBIAN/docfiles`.

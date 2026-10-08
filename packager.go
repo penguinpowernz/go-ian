@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 
+	"github.com/penguinpowernz/go-ian/util/colour"
 	"github.com/penguinpowernz/go-ian/util/deb"
 	"github.com/penguinpowernz/go-ian/util/file"
 )
@@ -322,7 +323,7 @@ var VerifyPackage = func(br *BuildRequest) error {
 	br.dbg.EndSection()
 
 	for _, p := range problems {
-		os.Stderr.WriteString("WARNING: " + p + "\n")
+		colour.Warn(p)
 	}
 
 	if len(problems) > 0 && !br.Insecure {
@@ -389,6 +390,11 @@ var VerifyManifest = func(br *BuildRequest) error {
 		return fmt.Errorf("failed to check the manifest: %s", err)
 	}
 
+	if name, fallback := br.Pkg.ManifestSource(); fallback {
+		br.dbg.Printf("NOTE: %s has no manifest of its own, using DEBIAN/%s",
+			br.Pkg.Ctrl().Arch, name)
+	}
+
 	br.dbg.Section("repo files against %s", br.Pkg.ManifestFile())
 
 	var problems []string
@@ -419,7 +425,7 @@ var VerifyManifest = func(br *BuildRequest) error {
 	br.dbg.EndSection()
 
 	for _, p := range problems {
-		os.Stderr.WriteString("WARNING: " + p + "\n")
+		colour.Warn(p)
 	}
 
 	if len(problems) > 0 && !br.Insecure {
@@ -565,7 +571,7 @@ var VerifyStaging = func(br *BuildRequest) error {
 
 	sort.Strings(problems)
 	for _, p := range problems {
-		os.Stderr.WriteString("WARNING: " + p + "\n")
+		colour.Warn(p)
 	}
 
 	if len(problems) > 0 && !br.Insecure {
@@ -654,12 +660,32 @@ var StageFiles = func(br *BuildRequest) error {
 	// stage the DEBIAN control files, including the md5sums manifest itself,
 	// which is copied in verbatim so the package ships exactly the sums that
 	// were committed and debsums works normally
+	manifest := br.Pkg.ManifestFile()
 	for _, fpath := range br.Pkg.CtrlFiles() {
-		dst := filepath.Join(br.Tmp, "DEBIAN", filepath.Base(fpath))
+		name := filepath.Base(fpath)
+
+		// the manifests for the other architectures live alongside this one in
+		// the control dir, but only this build's belongs in the package - and
+		// it is staged as plain "md5sums" whatever it is called in the repo,
+		// since that is the only name dpkg and debsums look for
+		if IsManifestFile(name) {
+			if fpath != manifest {
+				br.dbg.File("skipped", "", filepath.Join("DEBIAN", name), "manifest for another architecture")
+				continue
+			}
+			name = ManifestName
+		}
+
+		dst := filepath.Join(br.Tmp, "DEBIAN", name)
 		if err := file.CopyFile(fpath, dst); err != nil {
 			return fmt.Errorf("failed to stage control file %s: %s", fpath, err)
 		}
-		br.dbg.File("control", "", filepath.Join("DEBIAN", filepath.Base(fpath)), "")
+
+		shown := filepath.Join("DEBIAN", name)
+		if filepath.Base(fpath) != name {
+			shown = fmt.Sprintf("%s -> %s", filepath.Join("DEBIAN", filepath.Base(fpath)), shown)
+		}
+		br.dbg.File("control", "", shown, "")
 	}
 
 	br.dbg.Summary("staged %d file(s), skipped %d", staged, skipped)

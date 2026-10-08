@@ -1,8 +1,19 @@
 VERSION=$(shell git describe --tags|tr -d 'v')
 LDFLAGS=-ldflags "-X main.version=${VERSION}"
 
+# the architectures a release is built for, and the suffix of the binary that
+# build_all produces for each one
+ARCHES=i386 armhf amd64 arm64 armel
+
 default: build
 
+amd64: local
+	GOOS=linux GOARCH=amd64 go build ${LDFLAGS} -o ./release/ian.amd64.Linux ./cmd/ian
+	./ian set -a amd64
+	cp ./release/ian.amd64.Linux usr/bin/ian
+	./ian add usr/bin/ian
+	./ian set -V
+	./ian pkg
 
 build_all:
 	GOOS=linux GOARCH=arm GOARM=7 go build ${LDFLAGS} -o ./release/ian.armhf.Linux ./cmd/ian
@@ -18,30 +29,20 @@ local:
 release: local pkg_all
 
 clean:
-	rm -fr dpkg/pkg/*
+	rm -fr pkg/*
 	rm -fr release
 
+# Build every architecture, registering each binary against that arch's own
+# manifest (DEBIAN/md5sums.<arch>) so every build verifies strictly against the
+# sums committed for it.  The md5sums.* files this leaves behind are the audit
+# record and should be committed with the release.
 pkg_all: clean build_all
-	DEBUG=1 IAN_DIR=dpkg ./ian set -v ${VERSION}
-
-	DEBUG=1 IAN_DIR=dpkg ./ian set -a i386
-	cp ./release/ian.i386.Linux dpkg/usr/bin/ian
-	DEBUG=1 IAN_DIR=dpkg ./ian pkg
-
-	DEBUG=1 IAN_DIR=dpkg ./ian set -a armhf
-	cp ./release/ian.armhf.Linux dpkg/usr/bin/ian
-	DEBUG=1 IAN_DIR=dpkg ./ian pkg
-
-	DEBUG=1 IAN_DIR=dpkg ./ian set -a amd64
-	cp ./release/ian.amd64.Linux dpkg/usr/bin/ian
-	DEBUG=1 IAN_DIR=dpkg ./ian pkg
-
-	DEBUG=1 IAN_DIR=dpkg ./ian set -a arm64
-	cp ./release/ian.arm64.Linux dpkg/usr/bin/ian
-	DEBUG=1 IAN_DIR=dpkg ./ian pkg
-
-	DEBUG=1 IAN_DIR=dpkg ./ian set -a armel
-	cp ./release/ian.armel.Linux dpkg/usr/bin/ian
-	DEBUG=1 IAN_DIR=dpkg ./ian pkg
-
-	cp dpkg/pkg/* release
+	./ian set -V
+	for a in ${ARCHES}; do \
+		./ian set -a $$a || exit 1; \
+		cp ./release/ian.$$a.Linux usr/bin/ian || exit 1; \
+		./ian add usr/bin/ian || exit 1; \
+		./ian add -u || exit 1; \
+		./ian pkg || exit 1; \
+	done
+	cp pkg/* release

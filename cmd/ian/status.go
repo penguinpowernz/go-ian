@@ -88,6 +88,18 @@ included in the package and so are not shown here.`,
 			return
 		}
 
+		// with per-arch manifests there is more than one to choose from, so say
+		// which one these sums came from whenever it is not simply "md5sums"
+		if name, fallback := PKG.ManifestSource(); name != ian.ManifestName || fallback {
+			line := fmt.Sprintf("Manifest: DEBIAN/%s (%s)", name, PKG.Ctrl().Arch)
+			if fallback {
+				line = fmt.Sprintf("Manifest: DEBIAN/%s, which has no manifest of its own for %s",
+					name, PKG.Ctrl().Arch)
+			}
+			fmt.Println(c.P(colour.Dim, line))
+			fmt.Println()
+		}
+
 		if len(statuses) == 0 {
 			fmt.Println(c.P(colour.Bold, "No files registered for packaging."))
 			fmt.Println("  " + c.P(colour.Dim, `(use "ian add <file>..." to register files to include in the package)`))

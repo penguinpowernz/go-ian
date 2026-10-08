@@ -528,3 +528,53 @@ func TestBuildDebControlPerms(t *testing.T) {
 		})
 	})
 }
+
+// Per-arch manifests mean the control dir holds several md5sums files, but a
+// package must ship exactly one, under the plain name dpkg and debsums expect.
+func TestStageFilesPerArchManifest(t *testing.T) {
+	Convey("given a package with manifests for several architectures", t, func() {
+		p, _ := buildablePkg(t)
+
+		// buildablePkg registered against the plain manifest; copy it out to
+		// each arch so the control dir looks like a multi-arch release
+		plain, err := ioutil.ReadFile(p.ManifestFile())
+		So(err, ShouldBeNil)
+		for _, arch := range []string{"amd64", "arm64"} {
+			So(os.WriteFile(p.CtrlDir("md5sums."+arch), plain, 0644), ShouldBeNil)
+		}
+
+		p.Ctrl().Arch = "arm64"
+
+		Convey("staging ships only this arch's manifest, named md5sums", func() {
+			br := stageInto(t, p, BuildOpts{})
+			staged := filepath.Join(br.Tmp, "DEBIAN")
+
+			So(fexists(filepath.Join(staged, "md5sums")), ShouldBeTrue)
+			So(fexists(filepath.Join(staged, "md5sums.arm64")), ShouldBeFalse)
+			So(fexists(filepath.Join(staged, "md5sums.amd64")), ShouldBeFalse)
+
+			Convey("and its contents are this arch's manifest verbatim", func() {
+				want, err := ioutil.ReadFile(p.CtrlDir("md5sums.arm64"))
+				So(err, ShouldBeNil)
+				got, err := ioutil.ReadFile(filepath.Join(staged, "md5sums"))
+				So(err, ShouldBeNil)
+				So(string(got), ShouldEqual, string(want))
+			})
+
+			Convey("the other control files are staged as usual", func() {
+				So(fexists(filepath.Join(staged, "control")), ShouldBeTrue)
+				So(fexists(filepath.Join(staged, "docfiles")), ShouldBeTrue)
+			})
+		})
+
+		Convey("an arch with no manifest of its own stages the plain one", func() {
+			p.Ctrl().Arch = "armhf"
+			br := stageInto(t, p, BuildOpts{})
+			staged := filepath.Join(br.Tmp, "DEBIAN")
+
+			So(fexists(filepath.Join(staged, "md5sums")), ShouldBeTrue)
+			So(fexists(filepath.Join(staged, "md5sums.armhf")), ShouldBeFalse)
+			So(fexists(filepath.Join(staged, "md5sums.amd64")), ShouldBeFalse)
+		})
+	})
+}

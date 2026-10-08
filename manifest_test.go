@@ -784,3 +784,114 @@ func TestUpdateFiles(t *testing.T) {
 		})
 	})
 }
+
+func TestAddFileAllArches(t *testing.T) {
+	Convey("given a package with per-arch manifests", t, func() {
+		p, dir := newPkg(t)
+		mf := func(n string) string { return filepath.Join(dir, "DEBIAN", n) }
+
+		// two arches each carrying their own binary sum, the way a
+		// cross-compiled package looks once both have been registered
+		writeFile(t, mf("md5sums.amd64"), "aaa  usr/bin/app\n")
+		writeFile(t, mf("md5sums.arm64"), "bbb  usr/bin/app\n")
+		writeFile(t, filepath.Join(dir, "etc", "app.conf"), "hi\n")
+
+		p.ctrl.Arch = "amd64"
+
+		Convey("adding a file registers it in every manifest", func() {
+			written, err := p.AddFileAllArches("etc/app.conf")
+			So(err, ShouldBeNil)
+			So(written, ShouldResemble, []string{"md5sums", "md5sums.amd64", "md5sums.arm64"})
+
+			for _, n := range []string{"md5sums", "md5sums.amd64", "md5sums.arm64"} {
+				m, err := ReadManifest(mf(n))
+				So(err, ShouldBeNil)
+
+				var got string
+				for _, e := range m {
+					if e.Path == "etc/app.conf" {
+						got = e.Sum
+					}
+				}
+				So(got, ShouldEqual, hiSum)
+			}
+		})
+
+		// the whole point of per-arch manifests is that the same path holds
+		// different bytes per arch, so the other entries must be untouched
+		Convey("the other arches' existing sums are left alone", func() {
+			_, err := p.AddFileAllArches("etc/app.conf")
+			So(err, ShouldBeNil)
+
+			for n, want := range map[string]string{"md5sums.amd64": "aaa", "md5sums.arm64": "bbb"} {
+				m, err := ReadManifest(mf(n))
+				So(err, ShouldBeNil)
+
+				var got string
+				for _, e := range m {
+					if e.Path == "usr/bin/app" {
+						got = e.Sum
+					}
+				}
+				So(got, ShouldEqual, want)
+			}
+		})
+
+		Convey("adding it again updates the sum in place in every manifest", func() {
+			_, err := p.AddFileAllArches("etc/app.conf")
+			So(err, ShouldBeNil)
+
+			writeFile(t, filepath.Join(dir, "etc", "app.conf"), "changed\n")
+			_, err = p.AddFileAllArches("etc/app.conf")
+			So(err, ShouldBeNil)
+
+			for _, n := range []string{"md5sums", "md5sums.amd64", "md5sums.arm64"} {
+				m, err := ReadManifest(mf(n))
+				So(err, ShouldBeNil)
+
+				count := 0
+				for _, e := range m {
+					if e.Path == "etc/app.conf" {
+						count++
+						So(e.Sum, ShouldNotEqual, hiSum)
+					}
+				}
+				So(count, ShouldEqual, 1)
+			}
+		})
+
+		Convey("a missing file errors", func() {
+			_, err := p.AddFileAllArches("etc/nope.conf")
+			So(err, ShouldNotBeNil)
+		})
+
+		Convey("a control file cannot be registered", func() {
+			_, err := p.AddFileAllArches("DEBIAN/control")
+			So(err, ShouldNotBeNil)
+		})
+
+		Convey("an escaping path cannot be registered", func() {
+			_, err := p.AddFileAllArches("../outside")
+			So(err, ShouldNotBeNil)
+		})
+	})
+
+	// a package that has never been through "ian set -a" has only the plain
+	// manifest, and -a must still register there rather than doing nothing
+	Convey("given a single-arch package", t, func() {
+		p, dir := newPkg(t)
+		writeFile(t, filepath.Join(dir, "etc", "app.conf"), "hi\n")
+		p.ctrl.Arch = "amd64"
+
+		Convey("adding a file registers it in the plain manifest", func() {
+			written, err := p.AddFileAllArches("etc/app.conf")
+			So(err, ShouldBeNil)
+			So(written, ShouldResemble, []string{"md5sums"})
+
+			m, err := ReadManifest(filepath.Join(dir, "DEBIAN", "md5sums"))
+			So(err, ShouldBeNil)
+			So(len(m), ShouldEqual, 1)
+			So(m[0].Sum, ShouldEqual, hiSum)
+		})
+	})
+}

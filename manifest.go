@@ -27,9 +27,94 @@ type ManifestEntry struct {
 // in the package: nothing is packaged unless it appears here.
 type Manifest []ManifestEntry
 
-// ManifestFile returns the path to the package's md5sums manifest
+// ManifestName is the base name of the architecture independent manifest.
+// An arch-qualified manifest is this plus ".<arch>".
+const ManifestName = "md5sums"
+
+// ArchAll is the control file architecture for a package whose contents are
+// the same on every architecture, and so has no per-arch manifests
+const ArchAll = "all"
+
+// manifestFor returns the base name of the manifest for the given
+// architecture.  An unset arch and "all" both name the plain manifest, since
+// neither describes contents that vary between architectures.
+func manifestFor(arch string) string {
+	if arch == "" || arch == ArchAll {
+		return ManifestName
+	}
+	return ManifestName + "." + arch
+}
+
+// IsManifestFile reports whether a control file base name is a manifest, either
+// the plain one or any arch-qualified sibling.  Staging uses this to leave the
+// siblings out of the package: only the manifest for the arch being built is
+// shipped, and it is shipped as plain "md5sums" so dpkg and debsums find it.
+func IsManifestFile(name string) bool {
+	return name == ManifestName || strings.HasPrefix(name, ManifestName+".")
+}
+
+// ManifestFile returns the path to the manifest this package builds from, which
+// is the one reading falls back through.  See WriteManifestFile for the
+// asymmetry between reading and writing.
+//
+// What goes into a package is per architecture: the same package path (say
+// usr/bin/thing) holds different bytes in the amd64 build than in the arm64
+// one, so a single md5sums file can only ever vouch for whichever arch was
+// built last.  The sums are therefore kept per arch in DEBIAN/md5sums.<arch>,
+// which lets every architecture's sums be committed side by side and each
+// build verify strictly against its own.
+//
+// Packages that predate this (and any package built for a single arch) keep
+// working: when this arch has no manifest of its own, the plain DEBIAN/md5sums
+// is read instead.
 func (p *Pkg) ManifestFile() string {
-	return p.CtrlDir("md5sums")
+	name := manifestFor(p.ctrl.Arch)
+
+	// "all" (and an unset arch) means the contents do not vary by
+	// architecture, so the plain manifest is already the right name for them
+	// and there is nothing to fall back to
+	if name == ManifestName {
+		return p.CtrlDir(ManifestName)
+	}
+
+	qualified := p.CtrlDir(name)
+	if file.Exists(qualified) {
+		return qualified
+	}
+
+	// fall back to the plain manifest when this arch has none of its own, so a
+	// package carrying only the old single manifest keeps building unchanged
+	if file.Exists(p.CtrlDir(ManifestName)) {
+		return p.CtrlDir(ManifestName)
+	}
+
+	return qualified
+}
+
+// WriteManifestFile returns the path that registering a file writes to, which
+// is always the manifest for the package's own architecture.
+//
+// Writing deliberately does not follow ManifestFile's fallback.  If it did,
+// every arch would keep writing into the plain manifest that `ian init` leaves
+// behind, each build overwriting the last arch's sums, and the package could
+// never grow a second manifest.  Writing to the arch-qualified name instead
+// means the first `ian add` after `ian set -a` splits that arch off into its
+// own manifest, seeded from whatever the fallback was reading.
+func (p *Pkg) WriteManifestFile() string {
+	return p.CtrlDir(manifestFor(p.ctrl.Arch))
+}
+
+// ManifestFiles returns the paths of every manifest in the control dir, the
+// plain one and all arch-qualified siblings, sorted.
+func (p *Pkg) ManifestFiles() []string {
+	var found []string
+	for _, fpath := range p.CtrlFiles() {
+		if IsManifestFile(filepath.Base(fpath)) {
+			found = append(found, fpath)
+		}
+	}
+	sort.Strings(found)
+	return found
 }
 
 // ReadManifest parses a DEBIAN/md5sums file at the given path.  Each line is
@@ -316,17 +401,13 @@ func confine(root, rel string) (string, error) {
 	return path, nil
 }
 
-// WriteManifest writes the manifest to the package's md5sums file, replacing
-// any existing contents.
+// WriteManifest writes the manifest to the md5sums file for the package's
+// architecture, replacing any existing contents.  Since the callers read
+// through ManifestFile's fallback and write here, registering a file against an
+// arch that has no manifest yet copies the fallback's entries into a new
+// arch-qualified manifest along with the new one.
 func (p *Pkg) WriteManifest(m Manifest) error {
-	f, err := os.OpenFile(p.ManifestFile(), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	_, err = m.Write(f)
-	return err
+	return writeManifestFile(p.WriteManifestFile(), m)
 }
 
 // ExpandFiles resolves the given paths into a list of repo-relative file paths
@@ -582,4 +663,90 @@ func (p *Pkg) RemoveFiles(paths []string) ([]string, error) {
 
 	sort.Strings(removed)
 	return removed, p.WriteManifest(kept)
+}
+
+// ManifestSource describes which manifest the package is reading, for the
+// commands that report it.  It returns the base name of the manifest in use
+// and whether that is a fallback, meaning the package's architecture has no
+// manifest of its own and the plain one is standing in for it.
+func (p *Pkg) ManifestSource() (name string, fallback bool) {
+	name = filepath.Base(p.ManifestFile())
+	return name, name != filepath.Base(p.WriteManifestFile())
+}
+
+// AddFileAllArches upserts the given repo-relative file into every manifest in
+// the control dir rather than only the one for the package's own architecture.
+//
+// This is for the files that genuinely do not vary between architectures - a
+// config file, a systemd unit, a script - which would otherwise have to be
+// registered once per arch by setting each one in turn.  The sum written is the
+// sum of the file on disk, which is why this must not be used for a
+// cross-compiled binary: the bytes differ per arch, so recording the sum of
+// whichever build happens to be in the tree would tell every other arch's
+// manifest something untrue about its own contents.
+//
+// It returns the base names of the manifests it wrote, sorted.  Manifests that
+// already record the correct sum are still reported, since the point of the
+// command is to state where the file is registered.
+func (p *Pkg) AddFileAllArches(relpath string) ([]string, error) {
+	relpath, err := manifestPath(relpath)
+	if err != nil {
+		return nil, err
+	}
+
+	sum, err := Sum(p.Dir(relpath))
+	if err != nil {
+		return nil, err
+	}
+
+	// the manifest this package reads is included even when it does not exist
+	// yet, so a single-arch package with nothing registered still gets an
+	// entry rather than this silently doing nothing
+	targets := p.ManifestFiles()
+	if len(targets) == 0 {
+		targets = []string{p.WriteManifestFile()}
+	}
+
+	var written []string
+	for _, mf := range targets {
+		m, err := ReadManifest(mf)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %s", filepath.Base(mf), err)
+		}
+
+		if err := writeManifestFile(mf, upsert(m, relpath, sum)); err != nil {
+			return nil, err
+		}
+
+		written = append(written, filepath.Base(mf))
+	}
+
+	sort.Strings(written)
+	return written, nil
+}
+
+// upsert returns the manifest with the given path recorded at the given sum,
+// replacing an existing entry for it or appending a new one
+func upsert(m Manifest, path, sum string) Manifest {
+	for i, e := range m {
+		if e.Path == path {
+			m[i].Sum = sum
+			return m
+		}
+	}
+
+	return append(m, ManifestEntry{Sum: sum, Path: path})
+}
+
+// writeManifestFile writes a manifest to an explicit path, replacing any
+// existing contents
+func writeManifestFile(path string, m Manifest) error {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	_, err = m.Write(f)
+	return err
 }

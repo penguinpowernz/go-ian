@@ -20,7 +20,7 @@ func TestPkgPaths(t *testing.T) {
 			So(p.CtrlDir(), ShouldEqual, "/tmp/mypkg/DEBIAN")
 			So(p.CtrlFile(), ShouldEqual, "/tmp/mypkg/DEBIAN/control")
 			So(p.CtrlDir("postinst"), ShouldEqual, "/tmp/mypkg/DEBIAN/postinst")
-			So(p.ManifestFile(), ShouldEqual, "/tmp/mypkg/DEBIAN/md5sums")
+			So(p.ManifestFile(), ShouldEqual, "/tmp/mypkg/DEBIAN/md5sums.amd64")
 			So(p.DocFilesFile(), ShouldEqual, "/tmp/mypkg/DEBIAN/docfiles")
 		})
 
@@ -40,6 +40,82 @@ func TestPkgPaths(t *testing.T) {
 
 		Convey("the push file is a dotfile in the package root", func() {
 			So(p.PushFile(), ShouldEqual, "/tmp/mypkg/.ianpush")
+		})
+	})
+}
+
+func TestManifestFilePerArch(t *testing.T) {
+	Convey("given an initialized package", t, func() {
+		dir, err := ioutil.TempDir("/tmp", "go-ian-test")
+		So(err, ShouldBeNil)
+		defer os.RemoveAll(dir)
+		So(Initialize(dir), ShouldBeNil)
+
+		p, err := NewPackage(dir)
+		So(err, ShouldBeNil)
+
+		Convey("an arch of all uses the plain manifest", func() {
+			p.ctrl.Arch = "all"
+			So(p.ManifestFile(), ShouldEqual, filepath.Join(dir, "DEBIAN", "md5sums"))
+
+			Convey("even when an arch-qualified manifest happens to exist", func() {
+				So(os.WriteFile(filepath.Join(dir, "DEBIAN", "md5sums.all"), nil, 0644), ShouldBeNil)
+				So(p.ManifestFile(), ShouldEqual, filepath.Join(dir, "DEBIAN", "md5sums"))
+			})
+		})
+
+		Convey("an unset arch uses the plain manifest", func() {
+			p.ctrl.Arch = ""
+			So(p.ManifestFile(), ShouldEqual, filepath.Join(dir, "DEBIAN", "md5sums"))
+		})
+
+		Convey("a concrete arch falls back to the plain manifest while it is the only one", func() {
+			p.ctrl.Arch = "amd64"
+			So(p.ManifestFile(), ShouldEqual, filepath.Join(dir, "DEBIAN", "md5sums"))
+
+			Convey("and prefers the arch-qualified manifest once it exists", func() {
+				So(os.WriteFile(filepath.Join(dir, "DEBIAN", "md5sums.amd64"), nil, 0644), ShouldBeNil)
+				So(p.ManifestFile(), ShouldEqual, filepath.Join(dir, "DEBIAN", "md5sums.amd64"))
+
+				Convey("while another arch still falls back", func() {
+					p.ctrl.Arch = "arm64"
+					So(p.ManifestFile(), ShouldEqual, filepath.Join(dir, "DEBIAN", "md5sums"))
+				})
+			})
+		})
+
+		Convey("with no plain manifest at all a concrete arch names its own", func() {
+			So(os.Remove(filepath.Join(dir, "DEBIAN", "md5sums")), ShouldBeNil)
+			p.ctrl.Arch = "armhf"
+			So(p.ManifestFile(), ShouldEqual, filepath.Join(dir, "DEBIAN", "md5sums.armhf"))
+		})
+
+		Convey("ManifestFiles lists the plain manifest and every sibling", func() {
+			for _, n := range []string{"md5sums.amd64", "md5sums.arm64"} {
+				So(os.WriteFile(filepath.Join(dir, "DEBIAN", n), nil, 0644), ShouldBeNil)
+			}
+
+			So(p.ManifestFiles(), ShouldResemble, []string{
+				filepath.Join(dir, "DEBIAN", "md5sums"),
+				filepath.Join(dir, "DEBIAN", "md5sums.amd64"),
+				filepath.Join(dir, "DEBIAN", "md5sums.arm64"),
+			})
+		})
+	})
+}
+
+func TestIsManifestFile(t *testing.T) {
+	Convey("manifests are recognized by name", t, func() {
+		So(IsManifestFile("md5sums"), ShouldBeTrue)
+		So(IsManifestFile("md5sums.amd64"), ShouldBeTrue)
+		So(IsManifestFile("md5sums.all"), ShouldBeTrue)
+
+		Convey("and other control files are not", func() {
+			So(IsManifestFile("control"), ShouldBeFalse)
+			So(IsManifestFile("docfiles"), ShouldBeFalse)
+			So(IsManifestFile("postinst"), ShouldBeFalse)
+			So(IsManifestFile("md5sum"), ShouldBeFalse)
+			So(IsManifestFile("conffiles"), ShouldBeFalse)
 		})
 	})
 }
