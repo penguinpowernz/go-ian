@@ -1,8 +1,8 @@
 Package: ian
-Version: 3.2.0-31-geec5cd6-dirty
+Version: 4.0.0
 Section: misc
 Priority: optional
-Architecture: amd64
+Architecture: armel
 Maintainer: Robert McLeod <robert@autogrow.com>
 Essential: no
 Homepage: https://github.com/penguinpowernz/go-ian
