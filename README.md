@@ -243,6 +243,50 @@ package for ian, using ian.  Give it a try!
 
 Notice that README.md appears at `/usr/share/doc/ian/README.md` because it is added to the `DEBIAN/docfiles`.
 
+## Security
+
+Packaging is a supply chain step: a `.deb` is a tarball that installs as root. The design aims to make
+what ships be exactly what was committed, and to keep the tool itself a small target.
+
+**What goes in the package is an explicit list, not a sweep.** Only paths registered in
+`DEBIAN/md5sums` are staged, so a stray key, `.env` or editor backup in the repo cannot be swept into a
+release. Registered paths are validated on the way in *and* on the way out of the manifest (it is a
+hand-editable file in git): absolute paths, `..` traversal and anything under `DEBIAN/` are rejected, and
+staging re-confines every source and destination path to the repo and the staging dir respectively.
+
+**Contents are verified at three stages.** Sums are checked before staging, the staged tree is rechecked
+just before the archive is sealed, and the finished `.deb` is then re-opened — its `md5sums` compared to
+the committed manifest and every file extracted and rehashed. Each stage also fails on files present but
+*not* registered, so an injected extra file is caught, not just a modified one. The readback uses ian's
+own reader rather than `dpkg-deb`, since asking the tool that wrote the package whether the package is
+correct proves little. `-k` downgrades these to warnings and `-K` skips the readback — both are opt-in.
+
+**No shell, and few external tools.** The archive is written in process with the Go standard library, so
+a build needs no `dpkg-deb`, `fakeroot`, `md5sum` or `du`, and nothing from the host's `/usr/bin` is on
+the build path. `ian push` is the one place that runs user-supplied commands; those come from your own
+`.ianpush` and are executed via `exec` with an argv, never through a shell, so a package filename cannot
+be interpreted as shell syntax.
+
+**Permissions and ownership are normalised, not inherited.** Archive entries are written as `uid`/`gid` 0
+regardless of who built them (which is what makes `fakeroot` unnecessary), only the five maintainer
+scripts are written executable while other control files are forced to `0644`, and setuid, setgid and
+sticky bits are dropped from installed files.
+
+**Builds are reproducible.** Timestamps are pinned (`SOURCE_DATE_EPOCH` is honoured), entries sorted and
+host-specific metadata dropped, so the same commit builds byte-identical on two machines — which lets a
+third party confirm a published `.deb` came from the published source.
+
+**Extraction is defensive.** Reading a `.deb` back confines every entry to the extraction directory,
+bounds each file by its header size, and skips device nodes and fifos.
+
+Note the manifest uses MD5 because that is what the `md5sums` control file format and `debsums` require.
+MD5 is collision-prone, so treat it as drift detection against accident, not as a defence against a
+motivated attacker who can write to your repo — for that, rely on git signing and review of the
+committed sums.
+
+Found a security issue? Please open an issue, or mail the maintainer for anything you'd rather not
+disclose publicly.
+
 ## TODO
 
 * [x] more tests
@@ -265,6 +309,9 @@ Notice that README.md appears at `/usr/share/doc/ian/README.md` because it is ad
 * [x] don't shell out for fakeroot
 * [x] don't shell out for du
 * [x] pull maintainer from git config
+* [ ] honour `TMPDIR` instead of hardcoding `/tmp` for the staging and verify dirs
+* [ ] stage files with a sanitised mode so a setuid bit in the repo can't reach the staging dir
+* [ ] sign packages, or emit a detached signature / `SHA256SUMS` for releases
 
 ## Contributor Code of Conduct
 
