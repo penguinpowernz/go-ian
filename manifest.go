@@ -520,6 +520,10 @@ func skipFile(rel string) bool {
 
 // AddFile computes the MD5 sum of the given repo-relative file and upserts its
 // entry into the manifest, writing the updated manifest back to disk.
+//
+// A file already registered as a doc file is recorded at its destination under
+// the doc dir, so adding it again re-sums the entry it already has instead of
+// registering the repo path a second time.
 func (p *Pkg) AddFile(relpath string) error {
 	relpath, err := manifestPath(relpath)
 	if err != nil {
@@ -531,7 +535,12 @@ func (p *Pkg) AddFile(relpath string) error {
 		return err
 	}
 
-	return p.addEntry(relpath, sum)
+	path, err := p.ManifestPathFor(relpath)
+	if err != nil {
+		return err
+	}
+
+	return p.addEntry(path, sum)
 }
 
 // addEntry upserts a single path and sum into the manifest and writes it back.
@@ -625,34 +634,218 @@ func (p *Pkg) UpdateFiles() ([]string, []string, error) {
 // Matching is done against the manifest rather than the disk, so entries whose
 // files have already been deleted can still be unregistered.  It returns the
 // removed paths, and an error if any argument matched nothing.
+//
+// Unregistering a doc file's destination also drops it from DEBIAN/docfiles, so
+// that the list never names a file the manifest no longer carries.
 func (p *Pkg) RemoveFiles(paths []string) ([]string, error) {
 	m, err := p.Manifest()
 	if err != nil {
 		return nil, err
 	}
 
-	drop := map[string]bool{}
-	for _, arg := range paths {
-		rel, err := p.relToDir(arg)
+	drop, err := p.resolveRemovals(paths, m)
+	if err != nil {
+		return nil, err
+	}
+
+	removed, kept := partition(m, drop)
+	if err := p.WriteManifest(kept); err != nil {
+		return nil, err
+	}
+
+	return removed, p.pruneDocFiles(drop)
+}
+
+// RemoveFilesAllArches drops the given paths' entries from every manifest in
+// the control dir rather than only the one for the package's own architecture.
+//
+// This is the counterpart to AddFileAllArches: a file registered across every
+// arch takes as many commands to unregister again, one per arch, with the
+// manifests silently disagreeing in between.  The paths to drop are resolved
+// against each manifest in turn, so a directory argument removes whatever that
+// manifest happens to hold beneath it even where the arches differ.
+//
+// An argument is an error only when no manifest at all records it, since a file
+// genuinely present in some arches and not others is exactly what this is for.
+// It returns the removed paths, sorted and deduplicated across the manifests,
+// and the base names of the manifests it wrote.
+func (p *Pkg) RemoveFilesAllArches(paths []string) ([]string, []string, error) {
+	targets := p.ManifestFiles()
+	if len(targets) == 0 {
+		targets = []string{p.ManifestFile()}
+	}
+
+	// resolve against every manifest before writing any of them, so that an
+	// argument matching nothing anywhere leaves the manifests untouched rather
+	// than editing the ones that came before it in the list
+	drops := make([]map[string]bool, len(targets))
+	manifests := make([]Manifest, len(targets))
+
+	// an argument is only unregistered if no manifest matched it, so track
+	// which ones have matched somewhere and judge them once all are read
+	everMatched := map[string]bool{}
+
+	for i, mf := range targets {
+		m, err := ReadManifest(mf)
 		if err != nil {
-			return nil, err
+			return nil, nil, fmt.Errorf("%s: %s", filepath.Base(mf), err)
+		}
+		manifests[i] = m
+
+		drop, matched, err := p.matchRemovals(paths, m)
+		if err != nil {
+			return nil, nil, err
 		}
 
-		matched := false
-		for _, e := range m {
-			if e.Path == rel || rel == "." || strings.HasPrefix(e.Path, rel+"/") {
-				drop[e.Path] = true
-				matched = true
-			}
+		drops[i] = drop
+		for _, arg := range matched {
+			everMatched[arg] = true
 		}
+	}
 
-		if !matched {
+	for _, arg := range paths {
+		if !everMatched[arg] {
+			return nil, nil, fmt.Errorf("%s: not registered in any manifest", arg)
+		}
+	}
+
+	var removed, written []string
+	for i, mf := range targets {
+		r, kept := partition(manifests[i], drops[i])
+		removed = append(removed, r...)
+
+		if err := writeManifestFile(mf, kept); err != nil {
+			return nil, nil, err
+		}
+		written = append(written, filepath.Base(mf))
+	}
+
+	sort.Strings(written)
+
+	if err := p.pruneDocFiles(allDropped(drops)); err != nil {
+		return nil, nil, err
+	}
+
+	return dedupe(removed), written, nil
+}
+
+// allDropped unions the per-manifest removals into one set of dropped paths
+func allDropped(drops []map[string]bool) map[string]bool {
+	all := map[string]bool{}
+	for _, drop := range drops {
+		for path := range drop {
+			all[path] = true
+		}
+	}
+	return all
+}
+
+// pruneDocFiles drops from DEBIAN/docfiles every entry whose destination is
+// among the manifest paths just removed, keeping the list and the manifest in
+// agreement about which files the package carries.  A doc file left in the list
+// with no manifest entry would be staged into the package unregistered, and
+// would reappear in the manifest the next time anything re-added it.
+func (p *Pkg) pruneDocFiles(dropped map[string]bool) error {
+	if len(dropped) == 0 {
+		return nil
+	}
+
+	d, err := p.DocFiles()
+	if err != nil {
+		return err
+	}
+
+	kept := make(DocFiles, 0, len(d))
+	for _, src := range d {
+		if dropped[p.DocDest(src)] {
+			continue
+		}
+		kept = append(kept, src)
+	}
+
+	if len(kept) == len(d) {
+		return nil
+	}
+
+	return p.WriteDocFiles(kept)
+}
+
+// resolveRemovals works out which of the manifest's entries the given arguments
+// name, erroring on an argument that matches none of them.
+//
+// A path registered as a doc file is matched by the entry it installs to under
+// the doc dir, so that `ian rm docs/guide.md` unregisters the same entry that
+// `ian add docs/guide.md` wrote, rather than reporting the repo path as
+// unregistered because the manifest records only the destination.
+func (p *Pkg) resolveRemovals(paths []string, m Manifest) (map[string]bool, error) {
+	drop, matched, err := p.matchRemovals(paths, m)
+	if err != nil {
+		return nil, err
+	}
+
+	seen := map[string]bool{}
+	for _, arg := range matched {
+		seen[arg] = true
+	}
+
+	for _, arg := range paths {
+		if !seen[arg] {
 			return nil, fmt.Errorf("%s: not registered in the manifest", arg)
 		}
 	}
 
-	kept := make(Manifest, 0, len(m))
-	var removed []string
+	return drop, nil
+}
+
+// matchRemovals maps the given arguments onto the manifest entries they name,
+// returning the entries to drop and the arguments that matched at least one.
+//
+// A path registered as a doc file is matched by the entry it installs to under
+// the doc dir, so that removal finds the same entry that `ian add` wrote rather
+// than missing it because the manifest records only the destination.
+func (p *Pkg) matchRemovals(paths []string, m Manifest) (map[string]bool, []string, error) {
+	docSrcs, err := p.DocSources()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	drop := map[string]bool{}
+	var matched []string
+
+	for _, arg := range paths {
+		rel, err := p.relToDir(arg)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		// a doc file is registered under the doc dir, so look for the argument
+		// there as well as at its own path
+		want := map[string]bool{rel: true}
+		for dst, src := range docSrcs {
+			if src == rel || rel == "." || strings.HasPrefix(src, rel+"/") {
+				want[dst] = true
+			}
+		}
+
+		hit := false
+		for _, e := range m {
+			if want[e.Path] || rel == "." || strings.HasPrefix(e.Path, rel+"/") {
+				drop[e.Path] = true
+				hit = true
+			}
+		}
+
+		if hit {
+			matched = append(matched, arg)
+		}
+	}
+
+	return drop, matched, nil
+}
+
+// partition splits a manifest into the entries to drop and the ones to keep
+func partition(m Manifest, drop map[string]bool) (removed []string, kept Manifest) {
+	kept = make(Manifest, 0, len(m))
 	for _, e := range m {
 		if drop[e.Path] {
 			removed = append(removed, e.Path)
@@ -662,7 +855,22 @@ func (p *Pkg) RemoveFiles(paths []string) ([]string, error) {
 	}
 
 	sort.Strings(removed)
-	return removed, p.WriteManifest(kept)
+	return removed, kept
+}
+
+// dedupe returns the sorted paths with repeats collapsed, for the removals
+// reported across several manifests
+func dedupe(paths []string) []string {
+	sort.Strings(paths)
+
+	out := paths[:0:0]
+	for i, p := range paths {
+		if i > 0 && paths[i-1] == p {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
 }
 
 // ManifestSource describes which manifest the package is reading, for the
@@ -699,6 +907,13 @@ func (p *Pkg) AddFileAllArches(relpath string) ([]string, error) {
 		return nil, err
 	}
 
+	// a doc file is registered at its destination in every manifest too, the
+	// same as it would be for a single arch
+	path, err := p.ManifestPathFor(relpath)
+	if err != nil {
+		return nil, err
+	}
+
 	// the manifest this package reads is included even when it does not exist
 	// yet, so a single-arch package with nothing registered still gets an
 	// entry rather than this silently doing nothing
@@ -714,7 +929,7 @@ func (p *Pkg) AddFileAllArches(relpath string) ([]string, error) {
 			return nil, fmt.Errorf("%s: %s", filepath.Base(mf), err)
 		}
 
-		if err := writeManifestFile(mf, upsert(m, relpath, sum)); err != nil {
+		if err := writeManifestFile(mf, upsert(m, path, sum)); err != nil {
 			return nil, err
 		}
 

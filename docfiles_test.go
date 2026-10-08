@@ -317,3 +317,199 @@ func TestDocSourcesDetectsCollisions(t *testing.T) {
 		})
 	})
 }
+
+// registering a doc file through the ordinary add path is how a doc file gets
+// re-summed after an edit, so it must land on the entry the file already has
+// under the doc dir rather than registering the repo path a second time
+func TestAddFileOnADocFile(t *testing.T) {
+	Convey("given a package with a registered doc file", t, func() {
+		p, dir := newPkg(t)
+		writeFile(t, filepath.Join(dir, "docs", "guide.md"), "hi\n")
+		So(p.AddDocFile("docs/guide.md"), ShouldBeNil)
+
+		dst := p.DocDest("docs/guide.md")
+
+		Convey("the path it registers at is its destination", func() {
+			path, err := p.ManifestPathFor("docs/guide.md")
+			So(err, ShouldBeNil)
+			So(path, ShouldEqual, dst)
+		})
+
+		Convey("an ordinary file registers at its own path", func() {
+			path, err := p.ManifestPathFor("usr/bin/thing")
+			So(err, ShouldBeNil)
+			So(path, ShouldEqual, "usr/bin/thing")
+		})
+
+		Convey("when the file changes and is added again", func() {
+			writeFile(t, filepath.Join(dir, "docs", "guide.md"), "changed\n")
+			So(p.AddFile("docs/guide.md"), ShouldBeNil)
+
+			m, err := p.Manifest()
+			So(err, ShouldBeNil)
+
+			Convey("the doc dir entry is re-summed rather than duplicated", func() {
+				So(len(m), ShouldEqual, 1)
+				So(m[0].Path, ShouldEqual, dst)
+				So(m[0].Sum, ShouldNotEqual, hiSum)
+			})
+
+			Convey("so verification passes again", func() {
+				problems, err := p.Verify(false)
+				So(err, ShouldBeNil)
+				So(problems, ShouldBeEmpty)
+			})
+
+			Convey("and it stays a doc file", func() {
+				d, err := p.DocFiles()
+				So(err, ShouldBeNil)
+				So(d, ShouldResemble, DocFiles{"docs/guide.md"})
+			})
+		})
+
+		// "ian add ." walks the repo and finds the source file, which must be
+		// treated the same way as naming it, or a sweep would quietly double
+		// register every doc file in the package
+		Convey("when the whole package is swept with add", func() {
+			writeFile(t, filepath.Join(dir, "usr", "bin", "thing"), "hi\n")
+
+			files, err := p.ExpandFiles([]string{"."})
+			So(err, ShouldBeNil)
+			So(files, ShouldContain, "docs/guide.md")
+
+			for _, f := range files {
+				So(p.AddFile(f), ShouldBeNil)
+			}
+
+			m, err := p.Manifest()
+			So(err, ShouldBeNil)
+
+			Convey("the doc file is registered only at its destination", func() {
+				So(m.Paths(), ShouldContain, dst)
+				So(m.Paths(), ShouldNotContain, "docs/guide.md")
+			})
+		})
+	})
+}
+
+// -a has the same duplication hazard as a plain add, across every manifest
+func TestAddFileAllArchesOnADocFile(t *testing.T) {
+	Convey("given a multi-arch package with a registered doc file", t, func() {
+		p, dir := newPkg(t)
+		mf := func(n string) string { return filepath.Join(dir, "DEBIAN", n) }
+
+		writeFile(t, mf("md5sums.amd64"), "aaa  usr/bin/app\n")
+		writeFile(t, mf("md5sums.arm64"), "bbb  usr/bin/app\n")
+		writeFile(t, filepath.Join(dir, "docs", "guide.md"), "hi\n")
+
+		p.ctrl.Arch = "amd64"
+		So(p.AddDocFile("docs/guide.md"), ShouldBeNil)
+
+		dst := p.DocDest("docs/guide.md")
+
+		Convey("adding it with -a registers the destination in every manifest", func() {
+			written, err := p.AddFileAllArches("docs/guide.md")
+			So(err, ShouldBeNil)
+			So(written, ShouldResemble, []string{"md5sums", "md5sums.amd64", "md5sums.arm64"})
+
+			for _, n := range written {
+				m, err := ReadManifest(mf(n))
+				So(err, ShouldBeNil)
+				So(m.Paths(), ShouldContain, dst)
+				So(m.Paths(), ShouldNotContain, "docs/guide.md")
+			}
+		})
+
+		Convey("and re-adding it after an edit updates the sum in place", func() {
+			_, err := p.AddFileAllArches("docs/guide.md")
+			So(err, ShouldBeNil)
+
+			writeFile(t, filepath.Join(dir, "docs", "guide.md"), "changed\n")
+			_, err = p.AddFileAllArches("docs/guide.md")
+			So(err, ShouldBeNil)
+
+			for _, n := range []string{"md5sums", "md5sums.amd64", "md5sums.arm64"} {
+				m, err := ReadManifest(mf(n))
+				So(err, ShouldBeNil)
+
+				count := 0
+				for _, e := range m {
+					if e.Path == dst {
+						count++
+						So(e.Sum, ShouldNotEqual, hiSum)
+					}
+				}
+				So(count, ShouldEqual, 1)
+			}
+		})
+	})
+}
+
+// a doc file is named by its repo path everywhere else, so rm must take that
+// path too and drop the docfiles entry along with the manifest one
+func TestRemoveFilesOnADocFile(t *testing.T) {
+	Convey("given a package with a registered doc file", t, func() {
+		p, dir := newPkg(t)
+		writeFile(t, filepath.Join(dir, "docs", "guide.md"), "hi\n")
+		writeFile(t, filepath.Join(dir, "usr", "bin", "thing"), "hi\n")
+		So(p.AddDocFile("docs/guide.md"), ShouldBeNil)
+		So(p.AddFile("usr/bin/thing"), ShouldBeNil)
+
+		Convey("removing it by its repo path drops the doc dir entry", func() {
+			removed, err := p.RemoveFiles([]string{"docs/guide.md"})
+			So(err, ShouldBeNil)
+			So(removed, ShouldResemble, []string{p.DocDest("docs/guide.md")})
+
+			m, err := p.Manifest()
+			So(err, ShouldBeNil)
+			So(m.Paths(), ShouldResemble, []string{"usr/bin/thing"})
+
+			Convey("and drops it from the docfiles list too", func() {
+				d, err := p.DocFiles()
+				So(err, ShouldBeNil)
+				So(d, ShouldBeEmpty)
+			})
+		})
+
+		Convey("removing it by its destination works as well", func() {
+			_, err := p.RemoveFiles([]string{p.DocDest("docs/guide.md")})
+			So(err, ShouldBeNil)
+
+			d, err := p.DocFiles()
+			So(err, ShouldBeNil)
+			So(d, ShouldBeEmpty)
+		})
+
+		Convey("removing the directory holding it unregisters it", func() {
+			_, err := p.RemoveFiles([]string{"docs"})
+			So(err, ShouldBeNil)
+
+			d, err := p.DocFiles()
+			So(err, ShouldBeNil)
+			So(d, ShouldBeEmpty)
+		})
+
+		Convey("removing everything leaves no doc files behind", func() {
+			_, err := p.RemoveFiles([]string{"."})
+			So(err, ShouldBeNil)
+
+			m, err := p.Manifest()
+			So(err, ShouldBeNil)
+			So(m, ShouldBeEmpty)
+
+			d, err := p.DocFiles()
+			So(err, ShouldBeNil)
+			So(d, ShouldBeEmpty)
+		})
+
+		// removing another file must not disturb the list
+		Convey("removing an unrelated file leaves the doc file registered", func() {
+			_, err := p.RemoveFiles([]string{"usr/bin/thing"})
+			So(err, ShouldBeNil)
+
+			d, err := p.DocFiles()
+			So(err, ShouldBeNil)
+			So(d, ShouldResemble, DocFiles{"docs/guide.md"})
+		})
+	})
+}

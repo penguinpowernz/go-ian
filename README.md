@@ -122,9 +122,19 @@ files into the package.  `ian add` computes the MD5 sum of each given file and r
 Re-running `ian add` on a file updates its sum, so if you update something in the package it will enter your
 git commit record so the package contents are auditable.
 
+Doc files registered with `ian doc` are no exception: `ian add README.md` re-sums the entry it already has at
+`usr/share/doc/<package-name>/README.md` rather than registering `README.md` a second time, so editing a doc
+file and adding it again — or sweeping the whole package with `ian add .` — does the right thing without having
+to remember which files are doc files.
+
 You can also remove files. Then they will no longer be included in the package when you rebuild.
 
     ian rm usr/bin/myapp
+
+Doc files are removed by their path in the repo, the same one you added them with, and come out of
+`DEBIAN/docfiles` along with their manifest entry:
+
+    ian rm README.md
 
 You can always run `ian status` to see what files have changed.
 
@@ -167,6 +177,14 @@ registering once per arch.  `ian add -a` records them in every manifest at once:
 
     $ ian add -a etc/app.conf
     added etc/app.conf to md5sums, md5sums.amd64, md5sums.arm64
+
+`ian rm -a` is the counterpart, taking a file back out of every manifest in one go:
+
+    $ ian rm -a etc/app.conf
+    removed etc/app.conf from md5sums, md5sums.amd64, md5sums.arm64
+
+A file only has to be registered in one of the manifests, so a binary that some architectures carry and others
+don't can still be removed in a single command.
 
 Sometimes however the only thing to do is have a separate folder in the repository for each different architecture.
 This is what I do on a few projects. It adds multiple package roots but sometimes it is the cleanest way to do it
@@ -221,6 +239,7 @@ Some other commands:
     ian add <file>  # registers a file (and its md5sum) for inclusion
     ian add -u      # re-registers every registered file that has changed
     ian rm <file>   # unregisters a file, leaving it on disk
+    ian rm -a <file> # unregisters a file from every architecture's manifest
     ian doc         # lists doc files and where they install to
     ian doc <file>  # registers a file to install into /usr/share/doc/<package-name>
     ian status      # shows which registered files have changed, and which manifest it read

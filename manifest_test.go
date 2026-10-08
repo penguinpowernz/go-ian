@@ -895,3 +895,153 @@ func TestAddFileAllArches(t *testing.T) {
 		})
 	})
 }
+
+func TestRemoveFilesAllArches(t *testing.T) {
+	Convey("given a package with per-arch manifests", t, func() {
+		p, dir := newPkg(t)
+		mf := func(n string) string { return filepath.Join(dir, "DEBIAN", n) }
+
+		writeFile(t, mf("md5sums"), "aaa  usr/bin/app\nccc  etc/app.conf\n")
+		writeFile(t, mf("md5sums.amd64"), "aaa  usr/bin/app\nccc  etc/app.conf\n")
+		writeFile(t, mf("md5sums.arm64"), "bbb  usr/bin/app\nccc  etc/app.conf\n")
+
+		p.ctrl.Arch = "amd64"
+
+		Convey("removing a file drops it from every manifest", func() {
+			removed, written, err := p.RemoveFilesAllArches([]string{"etc/app.conf"})
+			So(err, ShouldBeNil)
+			So(removed, ShouldResemble, []string{"etc/app.conf"})
+			So(written, ShouldResemble, []string{"md5sums", "md5sums.amd64", "md5sums.arm64"})
+
+			for _, n := range written {
+				m, err := ReadManifest(mf(n))
+				So(err, ShouldBeNil)
+				So(m.Paths(), ShouldResemble, []string{"usr/bin/app"})
+			}
+		})
+
+		// the per-arch sums of everything else are the reason the manifests are
+		// separate, so a removal must not rewrite them
+		Convey("the other arches' remaining sums are left alone", func() {
+			_, _, err := p.RemoveFilesAllArches([]string{"etc/app.conf"})
+			So(err, ShouldBeNil)
+
+			for n, want := range map[string]string{"md5sums.amd64": "aaa", "md5sums.arm64": "bbb"} {
+				m, err := ReadManifest(mf(n))
+				So(err, ShouldBeNil)
+				So(m[0].Path, ShouldEqual, "usr/bin/app")
+				So(m[0].Sum, ShouldEqual, want)
+			}
+		})
+
+		Convey("a path registered in no manifest errors", func() {
+			_, _, err := p.RemoveFilesAllArches([]string{"etc/nope.conf"})
+			So(err, ShouldNotBeNil)
+
+			Convey("and leaves every manifest untouched", func() {
+				for _, n := range []string{"md5sums", "md5sums.amd64", "md5sums.arm64"} {
+					m, err := ReadManifest(mf(n))
+					So(err, ShouldBeNil)
+					So(len(m), ShouldEqual, 2)
+				}
+			})
+		})
+
+		// a cross-compiled binary genuinely only exists in some arches, so
+		// matching somewhere is enough
+		Convey("a path registered in only one manifest is still removed", func() {
+			writeFile(t, mf("md5sums.arm64"), "bbb  usr/bin/app\nddd  usr/bin/armonly\n")
+
+			removed, _, err := p.RemoveFilesAllArches([]string{"usr/bin/armonly"})
+			So(err, ShouldBeNil)
+			So(removed, ShouldResemble, []string{"usr/bin/armonly"})
+
+			m, err := ReadManifest(mf("md5sums.arm64"))
+			So(err, ShouldBeNil)
+			So(m.Paths(), ShouldResemble, []string{"usr/bin/app"})
+		})
+
+		Convey("a directory removes everything beneath it in every manifest", func() {
+			writeFile(t, mf("md5sums.amd64"), "aaa  usr/bin/app\nddd  usr/bin/other\n")
+
+			removed, _, err := p.RemoveFilesAllArches([]string{"usr"})
+			So(err, ShouldBeNil)
+			So(removed, ShouldResemble, []string{"usr/bin/app", "usr/bin/other"})
+
+			for _, n := range []string{"md5sums", "md5sums.amd64", "md5sums.arm64"} {
+				m, err := ReadManifest(mf(n))
+				So(err, ShouldBeNil)
+				So(m.Paths(), ShouldNotContain, "usr/bin/app")
+			}
+		})
+
+		Convey("\".\" unregisters every file in every manifest", func() {
+			_, _, err := p.RemoveFilesAllArches([]string{"."})
+			So(err, ShouldBeNil)
+
+			for _, n := range []string{"md5sums", "md5sums.amd64", "md5sums.arm64"} {
+				m, err := ReadManifest(mf(n))
+				So(err, ShouldBeNil)
+				So(m, ShouldBeEmpty)
+			}
+		})
+
+		Convey("an escaping path errors", func() {
+			_, _, err := p.RemoveFilesAllArches([]string{"../outside"})
+			So(err, ShouldNotBeNil)
+		})
+	})
+
+	Convey("given a registered doc file in a multi-arch package", t, func() {
+		p, dir := newPkg(t)
+		mf := func(n string) string { return filepath.Join(dir, "DEBIAN", n) }
+
+		writeFile(t, mf("md5sums.amd64"), "aaa  usr/bin/app\n")
+		writeFile(t, mf("md5sums.arm64"), "bbb  usr/bin/app\n")
+		writeFile(t, filepath.Join(dir, "docs", "guide.md"), "hi\n")
+
+		p.ctrl.Arch = "amd64"
+		So(p.AddDocFile("docs/guide.md"), ShouldBeNil)
+
+		dst := p.DocDest("docs/guide.md")
+		_, err := p.AddFileAllArches("docs/guide.md")
+		So(err, ShouldBeNil)
+
+		Convey("removing it by its repo path clears it everywhere", func() {
+			removed, _, err := p.RemoveFilesAllArches([]string{"docs/guide.md"})
+			So(err, ShouldBeNil)
+			So(removed, ShouldResemble, []string{dst})
+
+			for _, n := range []string{"md5sums", "md5sums.amd64", "md5sums.arm64"} {
+				m, err := ReadManifest(mf(n))
+				So(err, ShouldBeNil)
+				So(m.Paths(), ShouldNotContain, dst)
+			}
+
+			Convey("and drops it from the docfiles list", func() {
+				d, err := p.DocFiles()
+				So(err, ShouldBeNil)
+				So(d, ShouldBeEmpty)
+			})
+		})
+	})
+
+	// a single-arch package has only the plain manifest, and -a must still act
+	// on it rather than finding nothing to do
+	Convey("given a single-arch package", t, func() {
+		p, dir := newPkg(t)
+		writeFile(t, filepath.Join(dir, "DEBIAN", "md5sums"), "aaa  usr/bin/app\n")
+		p.ctrl.Arch = "amd64"
+
+		Convey("removing a file drops it from the plain manifest", func() {
+			removed, written, err := p.RemoveFilesAllArches([]string{"usr/bin/app"})
+			So(err, ShouldBeNil)
+			So(removed, ShouldResemble, []string{"usr/bin/app"})
+			So(written, ShouldResemble, []string{"md5sums"})
+
+			m, err := ReadManifest(filepath.Join(dir, "DEBIAN", "md5sums"))
+			So(err, ShouldBeNil)
+			So(m, ShouldBeEmpty)
+		})
+	})
+}

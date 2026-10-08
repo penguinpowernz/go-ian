@@ -27,6 +27,12 @@ Directories are walked recursively, so "ian add ." registers every file in the
 package.  The DEBIAN and pkg directories, VCS metadata and ian's own dotfiles
 are never registered.
 
+A file already registered as a doc file keeps its place in the doc directory:
+its sum is updated against the entry it installs as, rather than the file being
+registered a second time at its path in the repo.  This applies to "ian add ."
+and -a as well, so a sweep over the whole package re-sums the doc files in it
+instead of duplicating them.
+
 Use -u to re-record the sums of all already registered files that have changed,
 without naming any of them: it updates everything "ian status" reports as
 modified.  Registered files that have gone missing are reported and left alone,

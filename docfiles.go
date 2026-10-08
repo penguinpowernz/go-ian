@@ -233,17 +233,8 @@ func (p *Pkg) RemoveDocFile(relpath string) error {
 		return fmt.Errorf("%s: not registered as a doc file", relpath)
 	}
 
-	kept := make(DocFiles, 0, len(d))
-	for _, e := range d {
-		if e != relpath {
-			kept = append(kept, e)
-		}
-	}
-
-	if err := p.WriteDocFiles(kept); err != nil {
-		return err
-	}
-
+	// removing the manifest entry prunes the docfiles list with it, so the two
+	// are dropped together rather than this having to keep them in step itself
 	_, err = p.RemoveFiles([]string{p.DocDest(relpath)})
 	return err
 }
@@ -256,4 +247,31 @@ func (d DocFiles) contains(path string) bool {
 		}
 	}
 	return false
+}
+
+// ManifestPathFor returns the path that the given repo-relative file is
+// registered at in the manifest.  For a registered doc file that is its
+// destination under the doc dir, since that is where it lands in the package;
+// for every other file it is the path itself.
+//
+// Registering is done through this so that re-adding a doc file updates the sum
+// of the entry it already has, rather than adding a second entry for the repo
+// path - which would both package the file twice and leave verification
+// checking a path that staging never writes.
+func (p *Pkg) ManifestPathFor(relpath string) (string, error) {
+	relpath, err := manifestPath(relpath)
+	if err != nil {
+		return "", err
+	}
+
+	d, err := p.DocFiles()
+	if err != nil {
+		return "", err
+	}
+
+	if d.contains(relpath) {
+		return p.DocDest(relpath), nil
+	}
+
+	return relpath, nil
 }
