@@ -42,7 +42,6 @@ pkg_all: clean build_all
 		./ian set -a $$a || exit 1; \
 		cp ./release/ian.$$a.Linux usr/bin/ian || exit 1; \
 		./ian add usr/bin/ian || exit 1; \
-		./ian add -u || exit 1; \
 		./ian pkg || exit 1; \
 	done
 	cp pkg/* release
