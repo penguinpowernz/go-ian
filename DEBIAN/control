@@ -1,12 +1,12 @@
 Package: ian
-Version: 3.2.0-22-g0e66753-dirty
+Version: 3.2.0-31-geec5cd6-dirty
 Section: misc
 Priority: optional
 Architecture: amd64
 Maintainer: Robert McLeod <robert@autogrow.com>
 Essential: no
 Homepage: https://github.com/penguinpowernz/go-ian
-Installed-Size: 5017
+Installed-Size: 4830
 Description: Debian Package Management
   Provides a command to help with managing Debian
   packages in a git repository
