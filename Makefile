@@ -17,10 +17,15 @@ amd64: local
 
 build_all:
 	GOOS=linux GOARCH=arm GOARM=7 go build ${LDFLAGS} -o ./release/ian.armhf.Linux ./cmd/ian
+	sha256sum ./release/ian.armhf.Linux | sed 's/release\///' > ./release/ian.armhf.Linux.sha256sum
 	GOOS=linux GOARCH=arm64 go build ${LDFLAGS} -o ./release/ian.arm64.Linux ./cmd/ian
+	sha256sum ./release/ian.arm64.Linux | sed 's/release\///' > ./release/ian.arm64.Linux.sha256sum
 	GOOS=linux GOARCH=arm GOARM=6 go build ${LDFLAGS} -o ./release/ian.armel.Linux ./cmd/ian
+	sha256sum ./release/ian.armel.Linux | sed 's/release\///' > ./release/ian.armel.Linux.sha256sum
 	GOOS=linux GOARCH=amd64 go build ${LDFLAGS} -o ./release/ian.amd64.Linux ./cmd/ian
+	sha256sum ./release/ian.amd64.Linux | sed 's/release\///' > ./release/ian.amd64.Linux.sha256sum
 	GOOS=linux GOARCH=386 go build ${LDFLAGS} -o ./release/ian.i386.Linux ./cmd/ian
+	sha256sum ./release/ian.i386.Linux | sed 's/release\///' > ./release/ian.i386.Linux.sha256sum
 
 build: local
 local:
