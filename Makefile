@@ -1,4 +1,4 @@
-VERSION=$(shell git describe --tags|tr -d 'v')
+VERSION=$(shell git describe --tags --always --dirty|tr -d 'v')
 LDFLAGS=-ldflags "-X main.version=${VERSION}"
 
 # the architectures a release is built for, and the suffix of the binary that
