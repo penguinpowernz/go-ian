@@ -1,12 +1,13 @@
 # go-ian
 
-Simple debian package building and management named in memory of the late Ian Murdock, founder of the Deb**ian** project.
+Simple, auditable and secure debian package building and management named in memory of the 
+late Ian Murdock, founder of the Deb**ian** project.
 
 The purpose of this tool is to decrease the overhead in maintaining a debian package stored 
 in a git repository. It tries to mimic the CLI of other popular tools such as git and bundler.
 It is intended to be helpful when integrating other build tools/systems and with CI/CD.
 
-It has been ported to golang from the [ruby project of the same name](https://github.com/penguinpowernz/ian).
+It has been ported to golang from my [ruby project of the same name](https://github.com/penguinpowernz/ian).
 
 You can download binaries and Debian packages from the [releases](https://github.com/penguinpowernz/go-ian/releases) page.
 
@@ -84,11 +85,30 @@ This will simply dump the control file contents out.  There are flags for versio
  
 ### Set fields in the control file
 
-The architecture and the version can be set quickly in this manner.  Other fields are not (yet) supported.
+Control file fields can be set from the command line:
 
     ian set -a amd64
     ian set -v 1.2.3-test
     ian set -V  # this will set the version from the git tags
+
+| Flag | Long | Sets |
+| --- | --- | --- |
+| `-n` | `--name` | the package name |
+| `-a` | `--arch` | the architecture |
+| `-v` | `--version` | the version |
+| `-V` | `--git-version` | the version from `git describe` (tag-commit-dirty), with any leading `v` stripped |
+| `-m` | `--maintainer` | the maintainer |
+| `-D` | `--description` | the short description |
+| `-L` | `--long-description` | the long description |
+
+Several can be given at once, and each field that is set is echoed back:
+
+    $ ian set -a amd64 -v 1.2.3
+    Architecture set to amd64
+    Version set to 1.2.3
+
+If `-v` and `-V` are given together the explicit `-v` wins.  Giving no flags at all is an error.  The same
+flags are accepted by `ian init`, so a package can be described as it is created.
 
 ### Git like file addition
 
@@ -147,6 +167,11 @@ registering once per arch.  `ian add -a` records them in every manifest at once:
 
     $ ian add -a etc/app.conf
     added etc/app.conf to md5sums, md5sums.amd64, md5sums.arm64
+
+Sometimes however the only thing to do is have a separate folder in the repository for each different architecture.
+This is what I do on a few projects. It adds multiple package roots but sometimes it is the cleanest way to do it
+hiding the implementation behind Makefile tasks.
+
 ### Packaging
 
     ian pkg
