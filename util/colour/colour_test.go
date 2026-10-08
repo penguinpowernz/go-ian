@@ -94,3 +94,17 @@ func TestIsTerminalHonoursNoColor(t *testing.T) {
 		t.Error("For() returned a painter with colour on despite NO_COLOR")
 	}
 }
+
+func TestPainterWarning(t *testing.T) {
+	on := Painter{On: true}
+	off := Painter{On: false}
+
+	// the prefix is inside the escape so the whole line is coloured
+	if got, want := on.Warning("sums differ"), Yellow+"WARNING: sums differ"+Reset+"\n"; got != want {
+		t.Errorf("on.Warning() = %q, want %q", got, want)
+	}
+
+	if got, want := off.Warning("sums differ"), "WARNING: sums differ\n"; got != want {
+		t.Errorf("off.Warning() = %q, want %q", got, want)
+	}
+}

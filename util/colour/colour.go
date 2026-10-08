@@ -65,3 +65,15 @@ func (p Painter) Pad(code, s string, n int) string {
 
 	return p.P(code, s)
 }
+
+// Warning returns msg as a WARNING line, painted yellow when colour is on
+func (p Painter) Warning(msg string) string {
+	return p.P(Yellow, "WARNING: "+msg) + "\n"
+}
+
+// Warn writes a WARNING line to stderr, painted yellow when stderr is a
+// terminal.  The packaging steps all report their problems this way, so the
+// prefix and the colour are decided in the one place.
+func Warn(msg string) {
+	os.Stderr.WriteString(For(os.Stderr).Warning(msg))
+}

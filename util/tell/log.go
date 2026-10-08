@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+
+	"github.com/penguinpowernz/go-ian/util/colour"
 )
 
 // log levels
@@ -78,7 +80,9 @@ func Errorf(msg string, args ...interface{}) {
 // Fatalf logs a Fatalf message
 func Fatalf(msg string, args ...interface{}) {
 	msg = fmt.Sprintf(msg, args...)
-	log.Print("FATAL: " + msg)
+	// a fatal message is the last thing the process says, so it is painted
+	// red when the log is going to a terminal
+	log.Print(colour.For(os.Stderr).P(colour.Red, "FATAL: "+msg))
 	os.Exit(1)
 }
 
