@@ -49,6 +49,37 @@ func TestReadManifest(t *testing.T) {
 			So(err, ShouldNotBeNil)
 		})
 
+		Convey("with a sum but no path it errors", func() {
+			mf := filepath.Join(dir, "md5sums")
+			writeFile(t, mf, hiSum+"\n")
+
+			_, err := ReadManifest(mf)
+			So(err, ShouldNotBeNil)
+		})
+
+		// only the first run of whitespace separates the sum from the path,
+		// the rest of the line is the file name
+		Convey("with spaces in a path the whole path is kept", func() {
+			mf := filepath.Join(dir, "md5sums")
+			writeFile(t, mf, hiSum+"  usr/share/thing/My  Read Me.txt\n"+hiSum+"  bin/thing\n")
+
+			m, err := ReadManifest(mf)
+			So(err, ShouldBeNil)
+			So(len(m), ShouldEqual, 2)
+			So(m[0].Sum, ShouldEqual, hiSum)
+			So(m[0].Path, ShouldEqual, "usr/share/thing/My  Read Me.txt")
+			So(m[1].Path, ShouldEqual, "bin/thing")
+		})
+
+		Convey("with hand edited spacing and CRLF line endings it still reads", func() {
+			mf := filepath.Join(dir, "md5sums")
+			writeFile(t, mf, hiSum+" bin/thing\r\n"+hiSum+"\tetc/my conf\r\n")
+
+			m, err := ReadManifest(mf)
+			So(err, ShouldBeNil)
+			So(m.Paths(), ShouldResemble, []string{"bin/thing", "etc/my conf"})
+		})
+
 		// the manifest is committed and hand editable, so a path that escapes
 		// the package dir must be rejected on read as well as on write: it
 		// would otherwise be read from outside the repo and written outside
@@ -658,6 +689,18 @@ func TestWriteManifestRoundTrips(t *testing.T) {
 			So(m, ShouldResemble, Manifest{
 				{Sum: "abc", Path: "bin/thing"},
 				{Sum: "def", Path: "etc/conf"},
+			})
+		})
+
+		Convey("a path with spaces in it reads back intact", func() {
+			So(p.WriteManifest(Manifest{
+				{Sum: "abc", Path: "usr/share/thing/My File.txt"},
+			}), ShouldBeNil)
+
+			m, err := p.Manifest()
+			So(err, ShouldBeNil)
+			So(m, ShouldResemble, Manifest{
+				{Sum: "abc", Path: "usr/share/thing/My File.txt"},
 			})
 		})
 

@@ -133,31 +133,63 @@ func ReadManifest(path string) (Manifest, error) {
 
 	var m Manifest
 	for i, line := range str.Lines(string(data)) {
-		line = strings.TrimSpace(line)
-		if line == "" {
+		if strings.TrimSpace(line) == "" {
 			continue
 		}
 
-		fields := strings.Fields(line)
-		if len(fields) != 2 {
+		sum, name, ok := splitManifestLine(line)
+		if !ok {
 			return nil, fmt.Errorf("malformed md5sums line %d: %q", i+1, line)
 		}
 
 		// the manifest is committed to git and editable by hand, so the paths
 		// coming out of it get the same scrutiny as the ones going in
-		path, err := manifestPath(fields[1])
+		path, err := manifestPath(name)
 		if err != nil {
 			return nil, fmt.Errorf("md5sums line %d: %s", i+1, err)
 		}
 
-		m = append(m, ManifestEntry{Sum: fields[0], Path: path})
+		m = append(m, ManifestEntry{Sum: sum, Path: path})
 	}
 
 	return m, nil
 }
 
+// splitManifestLine splits an md5sums line into its sum and path.  Only the
+// first run of whitespace separates the two: everything after it is the path,
+// spaces and all, which is how dpkg and md5sum read the format.  Splitting the
+// whole line into fields instead would turn "usr/share/My File.txt" into a
+// malformed line.
+func splitManifestLine(line string) (sum, path string, ok bool) {
+	// a hand edited or CRLF checked out file should still read
+	line = strings.TrimRight(strings.TrimLeft(line, " \t"), "\r")
+
+	i := strings.IndexAny(line, " \t")
+	if i < 1 {
+		return "", "", false
+	}
+
+	sum, path = line[:i], line[i:]
+	for _, c := range sum {
+		if !strings.ContainsRune("0123456789abcdefABCDEF", c) {
+			return "", "", false
+		}
+	}
+
+	// the standard separator is exactly two characters ("  ", or " *" for
+	// binary mode), so anything beyond that belongs to the file name; any
+	// other spacing is somebody's hand edit and is just skipped over
+	if strings.HasPrefix(path, "  ") || strings.HasPrefix(path, " *") {
+		path = path[2:]
+	} else {
+		path = strings.TrimLeft(path, " \t")
+	}
+
+	return sum, path, path != ""
+}
+
 // Manifest reads the package's DEBIAN/md5sums file into a Manifest
-func (p *Pkg) Manifest() (Manifest, error) {
+func (p *Pkg) Manifest()(Manifest, error) {
 	return ReadManifest(p.ManifestFile())
 }
 
