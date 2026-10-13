@@ -136,15 +136,27 @@ Doc files are removed by their path in the repo, the same one you added them wit
 
     ian rm README.md
 
-You can always run `ian status` to see what files have changed.
+You can always run `ian status` to see what files have changed, and which files in the repo are not
+registered and so won't be in the package. A directory with nothing registered in it is shown once
+rather than file by file.
 
     $ ian status
-    Registered and unchanged:
+    Changed since registered:
+      (use "ian add <file>..." to record the new sum)
+      (use "ian rm <file>..." to drop it from the package)
 
-      ok        usr/bin/ian
+      modified  usr/bin/myapp
 
-    1 file(s) registered, all match the manifest.
-      (use "ian add <file>..." to register more, "ian pkg" to build)
+    Not registered, so not in the package:
+      (use "ian add <file>..." to include it in the package)
+
+      Makefile
+      src/
+
+    1 of 2 registered file(s) have drifted.
+      ("ian pkg" will refuse to build until this is resolved, or pass -k to build anyway)
+
+Registered files that haven't changed are only counted. Use `ian status -a` to list them too.
 
 If you want to update all of the files that you have modified (that already exist in the manifest) at once just do:
 
@@ -242,7 +254,8 @@ Some other commands:
     ian rm -a <file> # unregisters a file from every architecture's manifest
     ian doc         # lists doc files and where they install to
     ian doc <file>  # registers a file to install into /usr/share/doc/<package-name>
-    ian status      # shows which registered files have changed, and which manifest it read
+    ian status      # shows changed and unregistered files, and which manifest it read
+    ian status -a   # also lists the registered files that have not changed
     ian migrate     # migrates a pre-v4.0.0 package to the manifest format
     ian pkg -n      # lists the files that would be included, without building
     ian -V          # prints the ian version

@@ -639,6 +639,57 @@ func TestStatus(t *testing.T) {
 	})
 }
 
+func TestUnregistered(t *testing.T) {
+	Convey("given a package with some of its files registered", t, func() {
+		p, dir := newPkg(t)
+
+		writeFile(t, filepath.Join(dir, "usr", "bin", "app"), "hi\n")
+		writeFile(t, filepath.Join(dir, "usr", "bin", "extra"), "hi\n")
+		writeFile(t, filepath.Join(dir, "usr", "lib", "app", "a.so"), "hi\n")
+		writeFile(t, filepath.Join(dir, "usr", "lib", "app", "b.so"), "hi\n")
+		writeFile(t, filepath.Join(dir, "src", "deep", "main.go"), "hi\n")
+		writeFile(t, filepath.Join(dir, "Makefile"), "hi\n")
+		writeFile(t, filepath.Join(dir, "README.md"), "hi\n")
+		writeFile(t, filepath.Join(dir, ".gitignore"), "hi\n")
+		writeFile(t, filepath.Join(dir, "pkg", "old.deb"), "hi\n")
+		So(p.AddFile("usr/bin/app"), ShouldBeNil)
+
+		Convey("it lists the files beside a registered one, and whole dirs with none", func() {
+			found, err := p.Unregistered()
+			So(err, ShouldBeNil)
+			So(found, ShouldResemble, []string{"Makefile", "README.md", "src/", "usr/bin/extra", "usr/lib/"})
+		})
+
+		Convey("a doc file is registered by the repo file it is staged from", func() {
+			So(p.AddDocFile("README.md"), ShouldBeNil)
+
+			found, err := p.Unregistered()
+			So(err, ShouldBeNil)
+			So(found, ShouldNotContain, "README.md")
+		})
+
+		Convey("a registered file that has gone missing does not hide its siblings", func() {
+			So(os.Remove(filepath.Join(dir, "usr", "bin", "app")), ShouldBeNil)
+
+			found, err := p.Unregistered()
+			So(err, ShouldBeNil)
+			So(found, ShouldContain, "usr/bin/extra")
+		})
+	})
+
+	Convey("given a package with nothing registered", t, func() {
+		p, dir := newPkg(t)
+		writeFile(t, filepath.Join(dir, "usr", "bin", "app"), "hi\n")
+		writeFile(t, filepath.Join(dir, "Makefile"), "hi\n")
+
+		Convey("each top level dir is reported whole", func() {
+			found, err := p.Unregistered()
+			So(err, ShouldBeNil)
+			So(found, ShouldResemble, []string{"Makefile", "usr/"})
+		})
+	})
+}
+
 func TestFileStatusIsDocAndProblem(t *testing.T) {
 	Convey("given a doc file status", t, func() {
 		st := FileStatus{

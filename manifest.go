@@ -335,6 +335,67 @@ func (p *Pkg) Status() ([]FileStatus, error) {
 	return statuses, nil
 }
 
+// Unregistered returns what is in the repo but not in the manifest: exactly the
+// files that `ian add .` would newly register, so the same things are left out
+// here as there (the DEBIAN and pkg dirs, VCS metadata, ian's own dotfiles).
+//
+// A directory with nothing registered beneath it is reported once, as the
+// directory with a trailing slash, rather than file by file.  A package dir
+// usually holds its own source tree too, and listing every file of that would
+// bury the handful of paths worth reading.
+func (p *Pkg) Unregistered() ([]string, error) {
+	m, err := p.Manifest()
+	if err != nil {
+		return nil, err
+	}
+
+	docSrcs, err := p.DocSources()
+	if err != nil {
+		return nil, err
+	}
+
+	// a doc file is registered by the repo file it is staged from, so compare
+	// against the sources rather than the paths in the manifest
+	registered := make(map[string]bool, len(m))
+	// dirs that hold a registered file somewhere beneath them, which therefore
+	// have to be listed file by file
+	mixed := map[string]bool{".": true}
+	for _, e := range m {
+		src := p.SourceFor(e.Path, docSrcs)
+		registered[src] = true
+		for d := filepath.Dir(src); d != "."; d = filepath.Dir(d) {
+			mixed[d] = true
+		}
+	}
+
+	files, err := p.ExpandFiles([]string{"."})
+	if err != nil {
+		return nil, err
+	}
+
+	var found []string
+	seen := map[string]bool{}
+	for _, f := range files {
+		if registered[f] {
+			continue
+		}
+
+		// climb to the topmost dir that has nothing registered in it
+		shown := f
+		for d := filepath.Dir(f); !mixed[d]; d = filepath.Dir(d) {
+			shown = d + "/"
+		}
+
+		if !seen[shown] {
+			seen[shown] = true
+			found = append(found, shown)
+		}
+	}
+
+	sort.Strings(found)
+	return found, nil
+}
+
 // Verify checks every file in the manifest against its recorded sum, computing
 // the sum of the corresponding repo file.  It returns a list of human readable
 // problems (mismatches and missing files).  When insecure is false any problem

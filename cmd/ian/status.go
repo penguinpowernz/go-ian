@@ -12,6 +12,7 @@ import (
 )
 
 func init() {
+	statusCmd.Flags().BoolP("all", "a", false, "also list the registered files that have not changed")
 	statusCmd.Flags().BoolP("verbose", "v", false, "show the md5 sums of each file")
 	statusCmd.Flags().BoolP("quiet", "q", false, "print nothing, only set the exit code")
 	rootCmd.AddCommand(statusCmd)
@@ -53,19 +54,25 @@ const (
 
 var statusCmd = &cobra.Command{
 	Use:   "status",
-	Short: "List registered files and whether they have changed",
-	Long: `List every file registered in DEBIAN/md5sums alongside its state: whether it
-still matches the manifest, has been modified, or has gone missing.  Exits
-non-zero when any file has drifted, so it can be used as a check in CI.
+	Short: "Show changed and unregistered files",
+	Long: `Show what differs between the repo and DEBIAN/md5sums: registered files that
+have been modified or gone missing, and files in the repo that are not
+registered and so will not be included in the package.  Exits non-zero when any
+registered file has drifted, so it can be used as a check in CI.
+
+Registered files that still match the manifest are only counted.  Use -a to
+list them as well.
+
+Unregistered files are the ones "ian add ." would register.  A directory with
+nothing registered in it is shown once rather than file by file.  They do not
+affect the exit code, since a file left out of the package is not an error.
 
 Use -v to show the recorded sum of each file, and the current sum alongside it
-where the two differ.
-
-Only registered files are listed: unregistered files in the repo are not
-included in the package and so are not shown here.`,
+where the two differ.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		PKG = readPkg(DIR)
 
+		all, _ := cmd.Flags().GetBool("all")
 		verbose, _ := cmd.Flags().GetBool("verbose")
 		quiet, _ := cmd.Flags().GetBool("quiet")
 
@@ -88,6 +95,9 @@ included in the package and so are not shown here.`,
 			return
 		}
 
+		unregistered, err := PKG.Unregistered()
+		tell.IfFatalf(err, "failed to look for unregistered files")
+
 		// with per-arch manifests there is more than one to choose from, so say
 		// which one these sums came from whenever it is not simply "md5sums"
 		if name, fallback := PKG.ManifestSource(); name != ian.ManifestName || fallback {
@@ -98,12 +108,6 @@ included in the package and so are not shown here.`,
 			}
 			fmt.Println(c.P(colour.Dim, line))
 			fmt.Println()
-		}
-
-		if len(statuses) == 0 {
-			fmt.Println(c.P(colour.Bold, "No files registered for packaging."))
-			fmt.Println("  " + c.P(colour.Dim, `(use "ian add <file>..." to register files to include in the package)`))
-			return
 		}
 
 		// group by state so each group can carry its own hint, the way git
@@ -139,6 +143,12 @@ included in the package and so are not shown here.`,
 		}
 
 		for _, g := range groups {
+			// the unchanged files are the bulk of any package and say nothing
+			// about what needs doing, so they are only listed on request
+			if g.state == ian.StateOK && !all {
+				continue
+			}
+
 			var in []ian.FileStatus
 			for _, st := range statuses {
 				if st.State == g.state {
@@ -185,9 +195,29 @@ included in the package and so are not shown here.`,
 			fmt.Println()
 		}
 
+		if len(unregistered) > 0 {
+			fmt.Println(c.P(colour.Bold, "Not registered, so not in the package:"))
+			fmt.Println("  " + c.P(colour.Dim, `(use "ian add <file>..." to include it in the package)`))
+			fmt.Println()
+			for _, f := range unregistered {
+				fmt.Println("  " + c.P(colour.Red, f))
+			}
+			fmt.Println()
+		}
+
+		if len(statuses) == 0 {
+			fmt.Println(c.P(colour.Bold, "No files registered for packaging."))
+			fmt.Println("  " + c.P(colour.Dim, `(use "ian add <file>..." to register files to include in the package)`))
+			return
+		}
+
 		if drifted == 0 {
 			fmt.Println(c.P(colour.Green, fmt.Sprintf("%d file(s) registered, all match the manifest.", len(statuses))))
-			fmt.Println("  " + c.P(colour.Dim, `(use "ian add <file>..." to register more, "ian pkg" to build)`))
+			hint := `(use "ian status -a" to list them, "ian pkg" to build)`
+			if all {
+				hint = `(use "ian add <file>..." to register more, "ian pkg" to build)`
+			}
+			fmt.Println("  " + c.P(colour.Dim, hint))
 			return
 		}
 
