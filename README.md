@@ -89,7 +89,7 @@ Control file fields can be set from the command line:
 
     ian set -a amd64
     ian set -v 1.2.3-test
-    ian set -V  # this will set the version from the git tags
+    ian set -V  # this will set the version from the git tags (best for dev builds, see the release process below)
 
 | Flag | Long | Sets |
 | --- | --- | --- |
@@ -266,6 +266,46 @@ with ian but from a different folder location.
 
 Use `ian pkg -x` to show debug logs while building.
 
+## Recommended release process (for v4)
+
+The point of committing `DEBIAN/md5sums` is that a release tag records exactly what was shipped, so anyone can
+check out that tag, rebuild, and confirm the package matches. That only works if **the commit you tag contains
+the sums of the files built from that same commit**.
+
+There is a trap here. If your build embeds anything derived from the commit — a hash, `git describe` output, a
+dirty flag, a build timestamp — then the built file changes with every commit. Committing its new sum makes a new
+commit, which would build a different file again, so the sums in git can never describe a build of the commit
+they sit in. You end up always "committing the sums afterwards", one commit behind the tag.
+
+The way out is to make the build depend only on the source and a version you choose:
+
+1. **Make the build reproducible.** Keep timestamps, commit hashes, hostnames and absolute build paths out of
+   the output. Many toolchains honour `SOURCE_DATE_EPOCH`; see [reproducible-builds.org](https://reproducible-builds.org/docs/)
+   for your language. Changing only `DEBIAN/*` must not change the built bytes.
+2. **Take the version from `DEBIAN/control`, not from git.** Set it explicitly and have your build read it from
+   there, so it is an input to the build rather than a product of the commit graph:
+
+       ian set -v 1.2.0
+
+3. **Build, register and package:**
+
+       make                # or however you build
+       ian add -u          # record the sums of what was just built
+       ian pkg
+
+4. **Commit the control file and sums together, then tag that commit:**
+
+       git commit -am "release 1.2.0"
+       git tag v1.2.0
+
+5. **Verify** (ideally on another machine, or in CI on the tag): check out the tag, rebuild, and run `ian pkg`
+   *without* `-k`. Since `ian pkg` refuses to build when a file doesn't match its registered sum, a clean
+   package proves the tag reproduces what was committed.
+
+`ian set -V` is still handy for development builds, where a `1.2.0-3-gabc1234-dirty` style version is useful and
+nobody needs the sums to round-trip — just don't tag a commit whose sums came from a dev build. Between releases,
+a version like `1.2.1~dev` sorts before `1.2.1` in Debian and keeps the version an input rather than taken from git.
+
 ## Library Usage
 
 [![GoDoc](https://godoc.org/github.com/penguinpowernz/go-ian/debian/control?status.svg)](https://godoc.org/github.com/penguinpowernz/go-ian/debian/control)
@@ -299,6 +339,32 @@ package for ian, using ian.  Give it a try!
     sudo dpkg -i pkg/ian_*.deb
 
 Notice that README.md appears at `/usr/share/doc/ian/README.md` because it is added to the `DEBIAN/docfiles`.
+
+### How ian itself is released
+
+Ian follows the [recommended release process](#recommended-release-process) above, for five architectures from
+one repo. If you package Go, this is the part to copy. The [Makefile](Makefile) does the work:
+
+* **Release builds read the version from `DEBIAN/control`** and pass it in with `-ldflags "-X main.Version=..."`.
+* **They are built with `-trimpath -buildvcs=false` and `CGO_ENABLED=0`.** `-buildvcs=false` matters: since Go
+  1.18, `go build` stamps the commit hash and a dirty flag into the binary by default (see `go version -m <binary>`),
+  so even a build with no `-ldflags` changes every commit. `-trimpath` strips local paths so other machines get
+  the same bytes.
+* **Dev builds** (`make local`, `make amd64`) still use `git describe` and `ian set -V`.
+* **`make check_version`** runs before every release build and refuses to start if the control version looks
+  like `git describe` output, which is what you'd have after a dev build.
+* **`make verify`** rebuilds every architecture and checks each binary against its committed
+  `DEBIAN/md5sums.<arch>` without changing them, and fails if the tag on HEAD isn't `v<Version>`.
+
+So a release of ian is:
+
+    ./ian set -v 4.1.0
+    make pkg_all                          # builds all arches, registers each in DEBIAN/md5sums.<arch>, packages
+    git commit -am "release 4.1.0"
+    git tag v4.1.0
+    make verify                           # proves the tag rebuilds to the committed sums
+
+and anyone can check out `v4.1.0` and run `make verify` to confirm the published binaries came from that source.
 
 ## Security
 
