@@ -527,7 +527,7 @@ func (p *Pkg) ExpandFiles(paths []string) ([]string, error) {
 				return err
 			}
 
-			r, err := p.relToDir(path)
+			r, err := p.walkRel(path)
 			if err != nil {
 				return err
 			}
@@ -589,6 +589,14 @@ func (p *Pkg) relToDir(path string) (string, error) {
 	}
 
 	return rel, nil
+}
+
+// walkRel expresses a path produced by walking the package dir relative to
+// that dir.  Unlike an argument from the user, a walked path already carries
+// the package dir as its prefix, so it must not go through relToDir: with a
+// relative package dir that would prepend the dir a second time.
+func (p *Pkg) walkRel(path string) (string, error) {
+	return filepath.Rel(p.Dir(), path)
 }
 
 // skipDir reports whether a directory should be skipped entirely when expanding

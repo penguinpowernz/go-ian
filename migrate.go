@@ -131,7 +131,7 @@ func (p *Pkg) PlanMigration() (MigrationPlan, error) {
 			return err
 		}
 
-		rel, err := p.relToDir(path)
+		rel, err := p.walkRel(path)
 		if err != nil {
 			return err
 		}

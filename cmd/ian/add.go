@@ -79,10 +79,53 @@ architecture, so one sum cannot describe them all.`,
 			return
 		}
 
-		for _, f := range files {
-			tell.IfFatalf(PKG.AddFile(f), "failed to add %s", f)
-		}
+		runAdd(files)
 	},
+}
+
+// runAdd registers each file in the current architecture's manifest, saying
+// for each whether it was newly added or had its sum updated, so that adding a
+// directory shows what it brought in.  Files already registered with the same
+// sum are not mentioned.
+func runAdd(files []string) {
+	before := sums()
+
+	for _, f := range files {
+		tell.IfFatalf(PKG.AddFile(f), "failed to add %s", f)
+	}
+
+	after := sums()
+
+	for _, f := range files {
+		// a doc file is registered at its destination rather than its own path
+		path, err := PKG.ManifestPathFor(f)
+		tell.IfFatalf(err, "failed to add %s", f)
+
+		name := f
+		if path != f {
+			name = f + " -> " + path
+		}
+
+		old, was := before[path]
+		switch {
+		case !was:
+			fmt.Println("added", name)
+		case old != after[path]:
+			fmt.Println("updated", name)
+		}
+	}
+}
+
+// sums returns the sum recorded in the manifest for each registered path
+func sums() map[string]string {
+	m, err := PKG.Manifest()
+	tell.IfFatalf(err, "failed to read the manifest")
+
+	s := map[string]string{}
+	for _, e := range m {
+		s[e.Path] = e.Sum
+	}
+	return s
 }
 
 // runUpdate re-sums every registered file that has drifted from the manifest,

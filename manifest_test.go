@@ -454,6 +454,30 @@ func TestExpandFiles(t *testing.T) {
 			_, err := p.ExpandFiles([]string{"nope"})
 			So(err, ShouldNotBeNil)
 		})
+
+		// as with `IAN_DIR=dpkg/squeeze ian add opt/app` from a repo root: the
+		// package dir must not leak into the paths that get registered
+		Convey("a relative package dir is kept out of the found paths", func() {
+			wd, err := os.Getwd()
+			So(err, ShouldBeNil)
+			So(os.Chdir(filepath.Dir(dir)), ShouldBeNil)
+			defer os.Chdir(wd)
+
+			rp, err := NewPackage(filepath.Base(dir))
+			So(err, ShouldBeNil)
+
+			found, err := rp.ExpandFiles([]string{"usr"})
+			So(err, ShouldBeNil)
+			So(found, ShouldResemble, []string{"usr/bin/app", "usr/share/data"})
+
+			found, err = rp.ExpandFiles([]string{"."})
+			So(err, ShouldBeNil)
+			So(found, ShouldResemble, []string{"etc/app.conf", "usr/bin/app", "usr/share/data"})
+
+			for _, f := range found {
+				So(rp.AddFile(f), ShouldBeNil)
+			}
+		})
 	})
 }
 
