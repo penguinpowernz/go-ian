@@ -1,12 +1,12 @@
 Package: ian
-Version: 4.0.1-2-g659f011-dirty
+Version: 4.0.2
 Section: misc
 Priority: optional
 Architecture: armel
-Maintainer: Robert McLeod <robert@autogrow.com>
+Maintainer: Robert McLeod <robert@penguinpower.co.nz>
 Essential: no
 Homepage: https://github.com/penguinpowernz/go-ian
-Installed-Size: 4832
+Installed-Size: 4835
 Description: Debian Package Management
   Provides a command to help with managing Debian
   packages in a git repository
